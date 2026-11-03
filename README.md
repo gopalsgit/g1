@@ -42,7 +42,9 @@ team members for team leads, "report a problem", and the admin review queue. Att
 5. On the **Admins** tab add a row: your Gmail, your name, Active `yes`. Reload the sheet, then
    `Om Team > Set my admin PIN`. Each admin does this step with their own Google account.
 6. `Deploy > New deployment > Web app`. Execute as: **Me**. Who has access: **Anyone**.
-   `Om Team > Show app link` gives the link to send to staff.
+   Copy the **Web app URL** (ends in `/exec`), then in the sheet run `Om Team > Show app link`
+   and paste it. The app uses this saved link everywhere; Google's own guess can point at the
+   test version, which shows "Sorry, unable to open the file at this time".
 
 ### Google sign-in (needed for admins, optional for staff)
 
@@ -51,7 +53,8 @@ team members for team leads, "report a problem", and the admin review queue. Att
    Paste `signin/Code.gs` into `Code.gs`, and add an HTML file named `Page` with `signin/Page.html`.
 8. `Deploy > New deployment > Web app`. Execute as: **User accessing the web app**. Who has
    access: **Anyone with a Google account**. Copy its link.
-9. Back in the sheet: `Om Team > Connect Google sign-in`, paste that link. The dialog shows two
+9. Back in the sheet: `Om Team > Connect Google sign-in`. Leave the first box empty to keep
+   the app link from step 6, then paste the Sign-in link. The dialog shows two
    values, `SECRET` and `APP_URL`. In the Sign-in project, `Project Settings > Script properties`,
    add both.
 10. Open the app link, tap **Sign in with Google**, then enter your admin PIN.

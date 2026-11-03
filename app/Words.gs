@@ -10,6 +10,7 @@ var DEFAULT_SETTINGS = {
   'setting.lockMinutes': ['15', 'Minutes a locked login stays locked'],
   'setting.sessionHours': ['12', 'Hours before people have to sign in again'],
   'setting.alertAdmins': ['yes', 'Email admins about new joiners and locked logins (yes / no)'],
+  'setting.appUrl': ['', 'This app\'s Web app URL (Deploy > Manage deployments). Set by Om Team > Show app link'],
   'setting.signinUrl': ['', 'Filled by Om Team > Connect Google sign-in']
 };
 

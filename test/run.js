@@ -208,6 +208,13 @@ t('admin people search, person view, PIN reset', () => {
   assert.ok(G.adminJoinLink(adminToken).link.includes('?join='));
 });
 
+t('saved app link wins over Google\'s guess', () => {
+  assert.strictEqual(G.appUrl_(), 'https://script.google.com/macros/s/TEST/exec');
+  G.saveSetting_('appUrl', 'https://script.google.com/macros/s/REAL/exec');
+  assert.strictEqual(G.appUrl_(), 'https://script.google.com/macros/s/REAL/exec');
+  assert.ok(G.adminJoinLink(adminToken).link.startsWith('https://script.google.com/macros/s/REAL/exec?join='));
+});
+
 t('words from the tab override defaults', () => {
   const w = G.findBy_('Settings & words', 'Key', 'word.teamLead');
   G.updateRow_('Settings & words', w._row, { 'English / value': 'Thekedar' });

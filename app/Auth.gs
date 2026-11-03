@@ -217,8 +217,36 @@ function joinCodeValid_(code) {
   return exp > Date.now();
 }
 
+/**
+ * The app's /exec link. Google's own guess (ScriptApp.getService().getUrl()) can point at the
+ * test deployment, which does not open, so the link pasted in setting.appUrl always wins.
+ */
 function appUrl_() {
+  var saved = String(setting_('appUrl') || '').trim();
+  if (saved) return saved;
   try { return ScriptApp.getService().getUrl() || ''; } catch (e) { return ''; }
+}
+
+var EXEC_URL_RE = /^https:\/\/script\.google\.com\/.+\/exec$/;
+
+function saveSetting_(key, value) {
+  var row = findBy_(TABS.WORDS, 'Key', 'setting.' + key);
+  if (row) updateRow_(TABS.WORDS, row._row, { 'English / value': value });
+  else appendRow_(TABS.WORDS, { 'Key': 'setting.' + key, 'English / value': value });
+}
+
+/** Asks for the app's real link. Returns it, or '' if cancelled or wrong. */
+function askAppUrl_(ui) {
+  var res = ui.prompt('App link',
+    'Paste this app\'s link: in the Apps Script editor, Deploy > Manage deployments > Web app URL (it ends in /exec).' +
+    (appUrl_() ? '\n\nNow saved: ' + appUrl_() + '\nLeave empty to keep it.' : ''),
+    ui.ButtonSet.OK_CANCEL);
+  if (res.getSelectedButton() !== ui.Button.OK) return '';
+  var link = res.getResponseText().trim();
+  if (!link) return appUrl_();
+  if (!EXEC_URL_RE.test(link)) { ui.alert('That does not look like a web app link ending in /exec.'); return ''; }
+  saveSetting_('appUrl', link);
+  return link;
 }
 
 /* ------------------------------------------------------- sheet menus */
@@ -259,8 +287,8 @@ function menuSetAdminPin() {
 
 function menuJoinLink() {
   var ui = SpreadsheetApp.getUi();
-  var url = appUrl_();
-  if (!url) { ui.alert('Deploy the web app first (see README), then try again.'); return; }
+  var url = String(setting_('appUrl') || '').trim() || askAppUrl_(ui);
+  if (!url) return;
   var link = url + '?join=' + makeJoinCode_(7);
   var html = HtmlService.createHtmlOutput('<div style="font:14px/1.5 Arial;padding:12px"><p>Send this link to the new person. It works for 7 days and for more than one person.</p>' +
     '<p><a href="' + link + '" target="_blank">' + link + '</a></p></div>').setWidth(480).setHeight(200);
@@ -268,7 +296,8 @@ function menuJoinLink() {
 }
 
 function showAppLink() {
-  var url = appUrl_();
+  var url = askAppUrl_(SpreadsheetApp.getUi());
+  if (!url) return;
   var body = url
     ? '<p>Share this link with the team:</p><p><a href="' + url + '" target="_blank">' + url + '</a></p>'
     : '<p>No web app deployment yet. In the Apps Script editor: Deploy &gt; New deployment &gt; Web app, ' +
@@ -279,17 +308,16 @@ function showAppLink() {
 
 function menuConnectSignin() {
   var ui = SpreadsheetApp.getUi();
-  var url = appUrl_();
-  if (!url) { ui.alert('Deploy this web app first (see README), then try again.'); return; }
+  var url = askAppUrl_(ui);
+  if (!url) return;
   var res = ui.prompt('Connect Google sign-in',
     'Paste the web app link of the separate "Om Team Sign-in" project (see README, step 9). Leave empty to only see the values to copy.',
     ui.ButtonSet.OK_CANCEL);
   if (res.getSelectedButton() !== ui.Button.OK) return;
   var link = res.getResponseText().trim();
   if (link) {
-    if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(link)) { ui.alert('That does not look like a web app link ending in /exec.'); return; }
-    var row = findBy_(TABS.WORDS, 'Key', 'setting.signinUrl');
-    if (row) updateRow_(TABS.WORDS, row._row, { 'English / value': link });
+    if (!EXEC_URL_RE.test(link)) { ui.alert('That does not look like a web app link ending in /exec.'); return; }
+    saveSetting_('signinUrl', link);
   }
   var html = HtmlService.createHtmlOutput('<div style="font:13px/1.5 Arial;padding:12px">' +
     '<p>In the Sign-in project: Project Settings &gt; Script properties, add these two:</p>' +
