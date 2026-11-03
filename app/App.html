@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --ink: #1f1d1a; --muted: #6b665e; --line: #e2dfd8;
+    --brand: #8a3b12; --brand-ink: #ffffff; --ok: #1f7a3a; --ok-bg: #e5f4e4; --bad: #a62b2b; --bad-bg: #fbebeb;
+    --wait: #8a5a00; --wait-bg: #f9eeda; --soft: #f0efec;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body { font: 18px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari", sans-serif; }
+  #app { max-width: 560px; margin: 0 auto; padding: 0 16px 48px; }
+  header { display: flex; align-items: center; gap: 8px; padding: 14px 0; }
+  header h1 { font-size: 20px; margin: 0; flex: 1; }
+  .lang { border: 1px solid var(--line); background: var(--card); border-radius: 20px; padding: 6px 14px; font-size: 16px; }
+  h2 { font-size: 22px; margin: 8px 0 14px; }
+  h3 { font-size: 18px; margin: 18px 0 8px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+  .muted { color: var(--muted); font-size: 15px; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 10px; text-align: center;
+          font-size: 17px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+  .tile .ic { font-size: 40px; line-height: 1; }
+  .tile.off { opacity: .55; }
+  .tile small { color: var(--muted); font-size: 13px; }
+  label { display: block; font-weight: 600; margin: 14px 0 6px; }
+  input[type=text], input[type=tel], input[type=email], input[type=date], input[type=password], input[type=month], textarea, select {
+    width: 100%; font: inherit; padding: 12px; border: 1px solid #cfcbc2; border-radius: 10px; background: #fff; color: var(--ink); }
+  textarea { min-height: 96px; }
+  .row { display: flex; gap: 8px; align-items: stretch; }
+  .row > :first-child { flex: 1; }
+  button { font: inherit; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 12px 16px; cursor: pointer; }
+  button.main { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); width: 100%; padding: 16px; font-size: 19px; font-weight: 600; margin-top: 18px; }
+  button.ok { background: var(--ok); color: #fff; border-color: var(--ok); }
+  button.bad { background: var(--bad-bg); color: var(--bad); border-color: #e9c4c4; }
+  button.mic { min-width: 56px; font-size: 22px; }
+  button.mic.on { background: var(--bad-bg); border-color: var(--bad); }
+  button.link { border: 0; background: none; color: var(--brand); padding: 8px 0; text-decoration: underline; }
+  button:disabled { opacity: .6; }
+  .err { color: var(--bad); font-size: 15px; margin-top: 6px; }
+  .pill { display: inline-block; font-size: 13px; border-radius: 10px; padding: 2px 10px; }
+  .pill.Open, .pill.wait, .pill.Pending { background: var(--wait-bg); color: var(--wait); }
+  .pill.Approved, .pill.Active { background: var(--ok-bg); color: var(--ok); }
+  .pill.Rejected { background: var(--bad-bg); color: var(--bad); }
+  .pill.Left { background: var(--soft); color: var(--muted); }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: center; }
+  .kv:last-child { border-bottom: 0; }
+  .kv .k { color: var(--muted); font-size: 15px; }
+  .kv .v { text-align: right; word-break: break-word; }
+  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .choices button { padding: 16px 8px; }
+  .choices button.sel { border: 2px solid var(--brand); background: #fbf3ee; font-weight: 600; }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-weight: normal; }
+  .check input { width: 26px; height: 26px; margin-top: 2px; flex: none; }
+  .steps { display: flex; gap: 6px; margin: 4px 0 12px; }
+  .steps span { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+  .steps span.on { background: var(--brand); }
+  .photo { display: flex; gap: 12px; align-items: center; }
+  .photo img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+  .toast { position: fixed; left: 16px; right: 16px; bottom: 16px; max-width: 528px; margin: 0 auto; background: #222; color: #fff;
+           padding: 14px 16px; border-radius: 12px; font-size: 16px; z-index: 9; }
+  .spin { text-align: center; padding: 40px 0; color: var(--muted); }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 12px; }
+  .tabs button { white-space: nowrap; padding: 10px 14px; font-size: 16px; }
+  .tabs button.sel { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .bigpin { letter-spacing: 10px; text-align: center; font-size: 26px !important; }
+  a { color: var(--brand); }
+</style>
+</head>
+<body>
+<div id="app"><div class="spin">…</div></div>
+<script>
+var BOOT = <?!= boot ?>;
+var S = { lang: 'hi', words: { en: {}, hi: {} }, orgName: 'Om Textiles', signinUrl: '', token: null, kind: null, me: null, data: null, gtoken: '' };
+
+/* ------------------------------------------------------------ basics */
+function store(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function w(key) { return (S.words[S.lang] && S.words[S.lang][key]) || S.words.en[key] || key; }
+function fieldName(f) { return w('field.' + f); }
+
+function el(tag, attrs) {
+  var n = document.createElement(tag);
+  attrs = attrs || {};
+  Object.keys(attrs).forEach(function (k) {
+    var v = attrs[k];
+    if (v === null || v === undefined || v === false) return;
+    if (k === 'on') Object.keys(v).forEach(function (ev) { n.addEventListener(ev, v[ev]); });
+    else if (k === 'text') n.textContent = v;
+    else if (k === 'cls') n.className = v;
+    else if (k in n && k !== 'list') n[k] = v;
+    else n.setAttribute(k, v);
+  });
+  for (var i = 2; i < arguments.length; i++) add(n, arguments[i]);
+  return n;
+}
+function add(n, c) {
+  if (c === null || c === undefined || c === false) return;
+  if (Array.isArray(c)) { c.forEach(function (x) { add(n, x); }); return; }
+  n.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(String(c)) : c);
+}
+function screen() {
+  var app = document.getElementById('app');
+  app.innerHTML = '';
+  var hdr = el('header', {},
+    el('h1', { text: S.orgName }),
+    el('button', { cls: 'lang', text: S.lang === 'hi' ? 'English' : 'हिंदी', on: { click: toggleLang } }));
+  add(app, hdr);
+  for (var i = 0; i < arguments.length; i++) add(app, arguments[i]);
+  window.scrollTo(0, 0);
+}
+function busy() { screen(el('div', { cls: 'spin', text: w('app.wait') })); }
+var toastTimer;
+function toast(msg) {
+  var old = document.querySelector('.toast'); if (old) old.remove();
+  var t = el('div', { cls: 'toast', text: msg });
+  document.body.appendChild(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.remove(); }, 4500);
+}
+
+function call(fn) {
+  var args = Array.prototype.slice.call(arguments, 1);
+  return new Promise(function (resolve, reject) {
+    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn].apply(null, args);
+  });
+}
+
+var CODES = { E_SIGNIN: 'err.signin', E_LOCKED: 'err.locked', E_BADLOGIN: 'err.badLogin', E_PENDING: 'err.pending',
+  E_INACTIVE: 'err.inactive', E_NOGMAIL: 'err.noGmail', E_NOADMINPIN: 'err.noAdminPin', E_PIN: 'err.pin',
+  E_MOBILE: 'err.mobile', E_BADJOIN: 'join.badLink', E_ALREADY: 'err.already', E_GENERIC: 'err.generic' };
+
+/** Turns a server error into words. Field errors also return which field. */
+function explain(err) {
+  var m = String((err && err.message) || err || '');
+  var f = m.match(/E_FIELD:([^:]+):([\w.]+)/);
+  if (f) return { field: f[1], text: (w('field.' + f[1]) !== 'field.' + f[1] ? fieldName(f[1]) + ': ' : '') + w(f[2]) };
+  var c = m.match(/E_[A-Z]+/);
+  if (c && c[0] === 'E_SIGNIN') { signOut(true); }
+  return { text: w((c && CODES[c[0]]) || 'err.generic') };
+}
+function fail(err) { toast(explain(err).text); }
+
+function toggleLang() {
+  S.lang = S.lang === 'hi' ? 'en' : 'hi';
+  store('omt.lang', S.lang);
+  if (S.kind === 's' && S.token) call('setLanguage', S.token, S.lang).catch(function () {});
+  if (S.redraw) S.redraw();
+}
+function show(fn) { S.redraw = fn; fn(); }
+
+/* ---------------------------------------------------------- voice */
+var REC = window.SpeechRecognition || window.webkitSpeechRecognition;
+function withMic(input) {
+  var b = el('button', { cls: 'mic', type: 'button', title: w('app.speak'), text: '🎤' });
+  b.addEventListener('click', function () {
+    if (!REC) { toast(w('app.micHelp')); input.focus(); return; }
+    var r;
+    try { r = new REC(); } catch (e) { toast(w('app.micHelp')); return; }
+    r.lang = S.lang === 'hi' ? 'hi-IN' : 'en-IN';
+    r.interimResults = false;
+    r.maxAlternatives = 1;
+    b.classList.add('on'); toast(w('app.listening'));
+    r.onresult = function (ev) {
+      var said = ev.results[0][0].transcript;
+      input.value = input.value ? input.value + ' ' + said : said;
+      input.dispatchEvent(new Event('input'));
+    };
+    r.onerror = function (ev) { if (ev.error !== 'no-speech' && ev.error !== 'aborted') toast(w('app.micHelp')); };
+    r.onend = function () { b.classList.remove('on'); };
+    try { r.start(); } catch (e) { b.classList.remove('on'); toast(w('app.micHelp')); }
+  });
+  return el('div', { cls: 'row' }, input, b);
+}
+function textBox(value, multi) {
+  return multi ? el('textarea', { value: value || '' }) : el('input', { type: 'text', value: value || '' });
+}
+
+/* --------------------------------------------------------- photos */
+function photoPicker(onPicked) {
+  var img = el('img', { alt: '' }); img.style.display = 'none';
+  var file = el('input', { type: 'file', accept: 'image/*' }); file.style.display = 'none';
+  var btn = el('button', { type: 'button', text: '📷 ' + w('details.photoTake') });
+  btn.addEventListener('click', function () { file.click(); });
+  file.addEventListener('change', function () {
+    var f = file.files && file.files[0]; if (!f) return;
+    shrink(f, function (dataUrl) { img.src = dataUrl; img.style.display = ''; onPicked(dataUrl); });
+  });
+  return el('div', { cls: 'photo' }, img, btn, file);
+}
+/** Resizes a photo to at most 1400 px and JPEG, so uploads stay small on mobile data. */
+function shrink(file, done) {
+  var reader = new FileReader();
+  reader.onload = function () {
+    var im = new Image();
+    im.onload = function () {
+      var max = 1400, s = Math.min(1, max / Math.max(im.width, im.height));
+      var c = document.createElement('canvas');
+      c.width = Math.round(im.width * s); c.height = Math.round(im.height * s);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      done(c.toDataURL('image/jpeg', 0.8));
+    };
+    im.onerror = function () { toast(w('err.generic')); };
+    im.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ---------------------------------------------------------- start */
+function start() {
+  S.lang = load('omt.lang') || 'hi';
+  call('getBoot', BOOT.join || '').then(function (b) {
+    S.words = b.words; S.orgName = b.orgName || S.orgName; S.signinUrl = b.signinUrl || '';
+    if (BOOT.join) { if (b.joinValid) return joinForm(BOOT.join, null); return show(function () { screen(el('div', { cls: 'card', text: w('join.badLink') })); }); }
+    if (BOOT.g) return googleBack(BOOT.g);
+    S.token = load('omt.token'); S.kind = load('omt.kind');
+    if (S.token && S.kind === 'a') return adminHome();
+    if (S.token && S.kind === 's') return home();
+    loginScreen();
+  }).catch(function (e) { screen(el('div', { cls: 'card', text: 'Could not load. ' + (e && e.message ? e.message : '') })); });
+}
+
+function setSession(kind, token) {
+  S.kind = kind; S.token = token;
+  store('omt.kind', kind); store('omt.token', token);
+}
+function signOut(silent) {
+  S.kind = null; S.token = null; S.me = null;
+  store('omt.kind', null); store('omt.token', null);
+  if (!silent) loginScreen();
+  else setTimeout(loginScreen, 0);
+}
+
+/* ---------------------------------------------------------- login */
+function loginScreen() {
+  var mobile = el('input', { type: 'tel', inputMode: 'numeric', autocomplete: 'tel', maxLength: 13, placeholder: '98xxxxxxxx' });
+  var pin = el('input', { type: 'password', inputMode: 'numeric', maxLength: 4, cls: 'bigpin', autocomplete: 'current-password' });
+  var go = el('button', { cls: 'main', text: w('app.signIn') });
+  go.addEventListener('click', function () {
+    go.disabled = true;
+    call('login', mobile.value, pin.value).then(function (r) {
+      setSession('s', r.token);
+      if (r.mustChangePin) changePinScreen(true); else home();
+    }).catch(function (e) { go.disabled = false; fail(e); });
+  });
+  show(function () {
+    screen(el('h2', { text: w('app.signIn') }),
+      el('div', { cls: 'card' },
+        el('label', { text: w('app.mobile') }), mobile,
+        el('label', { text: w('app.pin') }), pin, go),
+      S.signinUrl ? el('div', { cls: 'card' },
+        el('div', { cls: 'muted', text: w('app.or') }),
+        el('a', { href: S.signinUrl, target: '_top' }, el('button', { cls: 'main', type: 'button', text: 'G  ' + w('app.google') }))) : null);
+  });
+}
+
+function googleBack(g) {
+  busy();
+  call('googleLogin', g).then(function (r) {
+    if (r.needAdminPin) { S.gtoken = g; return adminPinScreen(r); }
+    setSession('s', r.token);
+    if (r.mustChangePin) changePinScreen(true); else home();
+  }).catch(function (e) { fail(e); loginScreen(); });
+}
+
+function adminPinScreen(r) {
+  var pin = el('input', { type: 'password', inputMode: 'numeric', maxLength: 4, cls: 'bigpin' });
+  var go = el('button', { cls: 'main', text: w('app.signIn') });
+  go.addEventListener('click', function () {
+    go.disabled = true;
+    call('adminLogin', S.gtoken, pin.value).then(function (res) {
+      setSession('a', res.token); adminHome();
+    }).catch(function (e) { go.disabled = false; fail(e); });
+  });
+  show(function () {
+    screen(el('h2', { text: w('home.admin') + ': ' + r.name }),
+      el('div', { cls: 'card' }, el('div', { cls: 'muted', text: r.email }),
+        r.hasPin ? null : el('div', { cls: 'err', text: w('err.noAdminPin') }),
+        el('label', { text: w('app.adminPin') }), pin, go));
+  });
+}
+
+function changePinScreen(forced) {
+  var oldP = el('input', { type: 'password', inputMode: 'numeric', maxLength: 4, cls: 'bigpin' });
+  var n1 = el('input', { type: 'password', inputMode: 'numeric', maxLength: 4, cls: 'bigpin' });
+  var n2 = el('input', { type: 'password', inputMode: 'numeric', maxLength: 4, cls: 'bigpin' });
+  var go = el('button', { cls: 'main', text: w('app.save') });
+  go.addEventListener('click', function () {
+    if (!/^\d{4}$/.test(n1.value)) return toast(w('err.pin'));
+    if (n1.value !== n2.value) return toast(w('err.pinMatch'));
+    go.disabled = true;
+    call('changePin', S.token, oldP.value, n1.value).then(function () { toast(w('app.pinChanged')); home(); })
+      .catch(function (e) { go.disabled = false; fail(e); });
+  });
+  show(function () {
+    screen(el('h2', { text: w('app.changePin') }),
+      forced ? el('div', { cls: 'card', text: w('app.mustChangePin') }) : null,
+      el('div', { cls: 'card' },
+        el('label', { text: w('app.oldPin') }), oldP,
+        el('label', { text: w('app.newPin') }), n1,
+        el('label', { text: w('app.newPin2') }), n2, go),
+      forced ? null : el('button', { cls: 'link', text: '← ' + w('app.back'), on: { click: home } }));
+  });
+}
+
+/* ----------------------------------------------------------- home */
+function home() {
+  busy();
+  call('getMe', S.token).then(function (d) {
+    S.data = d; S.me = d.me;
+    if (d.me.Language && !load('omt.lang')) S.lang = d.me.Language;
+    if (d.mustChangePin) return changePinScreen(true);
+    show(homeView);
+  }).catch(fail);
+}
+
+function tile(icon, label, onClick, off, sub) {
+  return el('div', { cls: 'tile' + (off ? ' off' : ''), on: { click: onClick } },
+    el('div', { cls: 'ic', text: icon }), el('div', { text: label }), sub ? el('small', { text: sub }) : null);
+}
+
+function homeView() {
+  var me = S.me, lead = me.type === 'Team lead';
+  var soon = function () { toast(w('home.soon')); };
+  var open = (S.data.requests || []).filter(function (r) { return r.status === 'Open'; }).length;
+  screen(
+    el('h2', { text: w('app.hello') + ', ' + (lead ? me['Display name'] || me['Full name'] : me['Full name']) }),
+    el('div', { cls: 'tiles' },
+      lead ? tile('👥', w('home.team'), teamScreen) : tile('🕘', w('home.today'), soon, true, w('home.soon')),
+      tile('🪪', w('home.details'), detailsScreen),
+      tile('💰', w('home.money'), soon, true, w('home.soon')),
+      tile('⚠️', w('home.problem'), problemScreen),
+      tile('📨', w('home.requests'), requestsScreen, false, open ? open + ' ' + w('status.Open') : ''),
+      tile('🔑', w('app.changePin'), function () { changePinScreen(false); })),
+    el('button', { cls: 'link', text: w('app.signOut'), on: { click: function () { signOut(false); } } }));
+}
+
+function backBtn(fn) { return el('button', { cls: 'link', text: '← ' + w('app.back'), on: { click: fn || home } }); }
+
+/* -------------------------------------------------------- details */
+var DETAIL_FIELDS = ['Full name', 'Display name', 'DOB', 'Mobile 1', 'Mobile 2', 'Mobile 3', 'Emergency mobile',
+  'Emergency contact name', 'Emergency relation', 'Email', 'Address', 'Aadhaar', 'PAN', 'Bank account', 'IFSC',
+  'Account holder', 'Photo', 'Aadhaar photo', 'PAN photo'];
+var PHOTO_F = ['Photo', 'Aadhaar photo', 'PAN photo'];
+
+function detailsScreen() {
+  show(function () {
+    var me = S.me;
+    var pending = {};
+    (S.data.requests || []).forEach(function (r) { if (r.status === 'Open' && r.about === 'My details') pending[r.field] = true; });
+    var rows = DETAIL_FIELDS.filter(function (f) { return f !== 'Display name' || me.type === 'Team lead'; }).map(function (f) {
+      var v = me[f];
+      if (f === 'Emergency mobile' && v) v = me['Mobile ' + v] || v;
+      if (PHOTO_F.indexOf(f) >= 0) v = v ? '✓' : '—';
+      return el('div', { cls: 'kv' },
+        el('div', {}, el('div', { cls: 'k', text: fieldName(f) }), el('div', { text: v || '—' }),
+          pending[f] ? el('span', { cls: 'pill wait', text: w('details.pending') }) : null),
+        el('button', { text: w('details.change'), on: { click: function () { changeScreen(f); } } }));
+    });
+    var info = [];
+    if (me.Designation) info.push(el('div', { cls: 'kv' }, el('div', { cls: 'k', text: fieldName('Designation') }), el('div', { cls: 'v', text: me.Designation })));
+    if (me.Department) info.push(el('div', { cls: 'kv' }, el('div', { cls: 'k', text: fieldName('Department') }), el('div', { cls: 'v', text: me.Department })));
+    if (me['Joining date']) info.push(el('div', { cls: 'kv' }, el('div', { cls: 'k', text: fieldName('Joining date') }), el('div', { cls: 'v', text: me['Joining date'] })));
+    screen(backBtn(), el('h2', { text: w('home.details') }),
+      el('div', { cls: 'card' }, el('div', { cls: 'kv' }, el('div', { cls: 'k', text: 'ID' }), el('div', { cls: 'v', text: me.id })), info),
+      el('div', { cls: 'muted', text: w('details.changeHelp') }),
+      el('div', { cls: 'card' }, rows));
+  });
+}
+
+/** One input for a field, matched to its kind. Returns {node, get}. */
+function fieldInput(f, current) {
+  if (PHOTO_F.indexOf(f) >= 0) {
+    var picked = '';
+    return { node: photoPicker(function (d) { picked = d; }), get: function () { return picked; } };
+  }
+  if (f === 'Emergency mobile') {
+    var val = current || '';
+    var box = el('div', { cls: 'choices' });
+    ['1', '2', '3'].forEach(function (n) {
+      var b = el('button', { type: 'button', cls: val === n ? 'sel' : '', text: fieldName('Mobile ' + n) + (S.me && S.me['Mobile ' + n] ? '\n' + S.me['Mobile ' + n] : '') });
+      b.addEventListener('click', function () { val = n; Array.prototype.forEach.call(box.children, function (c) { c.classList.remove('sel'); }); b.classList.add('sel'); });
+      box.appendChild(b);
+    });
+    return { node: box, get: function () { return val; } };
+  }
+  if (f === 'DOB' || f === 'Joining date') {
+    var d = el('input', { type: 'date', value: current || '' });
+    return { node: d, get: function () { return d.value; } };
+  }
+  if (/^Mobile/.test(f) || f === 'Aadhaar' || f === 'Bank account') {
+    var n = el('input', { type: 'tel', inputMode: 'numeric', value: '' });
+    return { node: n, get: function () { return n.value; } };
+  }
+  if (f === 'PAN' || f === 'IFSC') {
+    var u = el('input', { type: 'text', autocapitalize: 'characters', value: '' });
+    u.addEventListener('input', function () { u.value = u.value.toUpperCase(); });
+    return { node: u, get: function () { return u.value; } };
+  }
+  if (f === 'Email') {
+    var e = el('input', { type: 'email', value: current || '' });
+    return { node: e, get: function () { return e.value; } };
+  }
+  var t = textBox(current, f === 'Address');
+  return { node: withMic(t), get: function () { return t.value; } };
+}
+
+function changeScreen(f) {
+  var masked = ['Aadhaar', 'PAN', 'Bank account'].indexOf(f) >= 0 || PHOTO_F.indexOf(f) >= 0;
+  var inp = fieldInput(f, masked ? '' : S.me[f]);
+  var note = textBox('', true);
+  var go = el('button', { cls: 'main', text: w('app.send') });
+  go.addEventListener('click', function () {
+    var v = inp.get();
+    if (!v && f !== 'Mobile 2' && f !== 'Mobile 3') return toast(w('err.required'));
+    go.disabled = true;
+    call('requestChange', S.token, f, v, note.value).then(function () { toast(w('details.sent')); home(); })
+      .catch(function (e) { go.disabled = false; fail(e); });
+  });
+  show(function () {
+    screen(backBtn(detailsScreen), el('h2', { text: fieldName(f) }),
+      el('div', { cls: 'card' },
+        !masked && S.me[f] ? el('div', { cls: 'muted', text: S.me[f] }) : null,
+        el('label', { text: w('details.newValue') }), inp.node,
+        el('label', { text: w('details.note') + ' (' + w('app.optional') + ')' }), withMic(note), go),
+      el('div', { cls: 'muted', text: w('details.changeHelp') }));
+  });
+}
+
+/* -------------------------------------------------------- problem */
+function problemScreen() {
+  var about = '';
+  var lead = S.me.type === 'Team lead';
+  var opts = lead ? ['My team', 'Other'] : ['Attendance', 'Salary', 'Advance', 'Other'];
+  var box = el('div', { cls: 'choices' });
+  opts.forEach(function (o) {
+    var b = el('button', { type: 'button', text: w('about.' + o) });
+    b.addEventListener('click', function () { about = o; Array.prototype.forEach.call(box.children, function (c) { c.classList.remove('sel'); }); b.classList.add('sel'); });
+    box.appendChild(b);
+  });
+  var when = el('input', { type: 'date' });
+  var note = textBox('', true);
+  var go = el('button', { cls: 'main', text: w('app.send') });
+  go.addEventListener('click', function () {
+    if (!about) return toast(w('problem.what'));
+    if (!note.value.trim()) return toast(w('err.required'));
+    go.disabled = true;
+    call('reportProblem', S.token, about, when.value, note.value).then(function () { toast(w('details.sent')); home(); })
+      .catch(function (e) { go.disabled = false; fail(e); });
+  });
+  show(function () {
+    screen(backBtn(), el('h2', { text: w('home.problem') }),
+      el('div', { cls: 'card' },
+        el('label', { text: w('problem.what') }), box,
+        el('label', { text: w('problem.when') + ' (' + w('app.optional') + ')' }), when,
+        el('label', { text: w('problem.note') }), withMic(note), go));
+  });
+}
+
+/* ------------------------------------------------------- requests */
+function requestsScreen() {
+  show(function () {
+    var list = (S.data.requests || []).map(function (r) {
+      var what = r.about === 'My details' ? fieldName(r.field) : w('about.' + r.about) + (r.field ? ' · ' + r.field : '');
+      return el('div', { cls: 'card' },
+        el('div', { cls: 'kv' }, el('div', {}, el('b', { text: what }), el('div', { cls: 'muted', text: r.date + ' · ' + r.id })),
+          el('span', { cls: 'pill ' + r.status, text: w('status.' + r.status) })),
+        r.asked && r.about === 'My details' ? el('div', { text: '→ ' + r.asked }) : null,
+        r.note ? el('div', { cls: 'muted', text: r.note }) : null,
+        r.reply ? el('div', {}, el('b', { text: w('req.reply') + ': ' }), r.reply) : null);
+    });
+    screen(backBtn(), el('h2', { text: w('home.requests') }), list.length ? list : el('div', { cls: 'card', text: w('req.none') }));
+  });
+}
+
+/* ----------------------------------------------------------- team */
+function teamScreen() {
+  show(function () {
+    var team = S.data.team || [];
+    var pendingAdds = (S.data.requests || []).filter(function (r) { return r.status === 'Open' && r.about === 'My team'; });
+    var rows = team.map(function (m) {
+      return el('div', { cls: 'kv' },
+        el('div', {}, el('b', { text: m.name }), el('div', { cls: 'muted', text: [m.skill, m.mobile].filter(String).join(' · ') })),
+        el('button', { cls: 'bad', text: w('team.remove'), on: { click: function () {
+          if (!confirm(w('team.remove') + ': ' + m.name + '?')) return;
+          call('requestTeamChange', S.token, 'remove', { id: m.id }, '').then(function () { toast(w('details.sent')); home(); }).catch(fail);
+        } } }));
+    });
+    screen(backBtn(), el('h2', { text: w('home.team') + ': ' + (S.me['Display name'] || S.me['Full name']) }),
+      el('div', { cls: 'card' }, rows.length ? rows : el('div', { cls: 'muted', text: w('team.none') })),
+      pendingAdds.length ? el('div', { cls: 'muted', text: pendingAdds.length + ' ' + w('details.pending') }) : null,
+      el('button', { cls: 'main', text: '+ ' + w('team.add'), on: { click: addMemberScreen } }));
+  });
+}
+
+function addMemberScreen() {
+  var name = textBox(''), skill = textBox('');
+  var mobile = el('input', { type: 'tel', inputMode: 'numeric' });
+  var go = el('button', { cls: 'main', text: w('app.send') });
+  go.addEventListener('click', function () {
+    if (!name.value.trim()) return toast(w('err.required'));
+    go.disabled = true;
+    call('requestTeamChange', S.token, 'add', { name: name.value, mobile: mobile.value, skill: skill.value }, '')
+      .then(function () { toast(w('details.sent')); home(); }).catch(function (e) { go.disabled = false; fail(e); });
+  });
+  show(function () {
+    screen(backBtn(teamScreen), el('h2', { text: w('team.add') }),
+      el('div', { cls: 'card' },
+        el('label', { text: w('team.name') }), withMic(name),
+        el('label', { text: w('app.mobile') + ' (' + w('app.optional') + ')' }), mobile,
+        el('label', { text: w('team.skill') + ' (' + w('app.optional') + ')' }), withMic(skill), go));
+  });
+}
+
+/* ------------------------------------------------------------ join */
+function joinForm(code, adminToken) {
+  var F = { Type: 'Employee', 'Emergency mobile': '1', Language: S.lang };
+  var P = {};
+  var step = 0;
+  var inputs = {};
+  function txt(f, multi) { var t = inputs[f] || textBox(F[f] || '', multi); inputs[f] = t; return withMic(t); }
+  function num(f) { var t = inputs[f] || el('input', { type: 'tel', inputMode: 'numeric', value: F[f] || '' }); inputs[f] = t; return t; }
+  function up(f) {
+    var t = inputs[f] || el('input', { type: 'text', autocapitalize: 'characters', value: F[f] || '' });
+    t.oninput = function () { t.value = t.value.toUpperCase(); }; inputs[f] = t; return t;
+  }
+  function date(f) { var t = inputs[f] || el('input', { type: 'date', value: F[f] || '' }); inputs[f] = t; return t; }
+  function lbl(f, opt) { return el('label', { text: fieldName(f) + (opt ? ' (' + w('app.optional') + ')' : '') }); }
+  function collect() { Object.keys(inputs).forEach(function (k) { F[k] = inputs[k].value; }); }
+  function choice(opts, key, labels) {
+    var box = el('div', { cls: 'choices' });
+    opts.forEach(function (o, i) {
+      var b = el('button', { type: 'button', cls: F[key] === o ? 'sel' : '', text: labels[i] });
+      b.addEventListener('click', function () { F[key] = o; render(); });
+      box.appendChild(b);
+    });
+    return box;
+  }
+  function emergencyFor(n) {
+    var c = el('input', { type: 'checkbox', checked: F['Emergency mobile'] === n });
+    c.addEventListener('change', function () { collect(); F['Emergency mobile'] = n; render(); });
+    return el('label', { cls: 'check' }, c, el('span', { text: w('field.isEmergency') }));
+  }
+  function photo(f) {
+    return el('div', {}, lbl(f, f !== 'Aadhaar photo'), photoPicker(function (d) { P[f] = d; }), P[f] ? el('div', { cls: 'muted', text: '✓' }) : null);
+  }
+  var pin1 = el('input', { type: 'password', inputMode: 'numeric', maxLength: 4, cls: 'bigpin' });
+  var pin2 = el('input', { type: 'password', inputMode: 'numeric', maxLength: 4, cls: 'bigpin' });
+  var consent = el('input', { type: 'checkbox' });
+
+  var steps = [
+    function () {
+      return [el('h3', { text: w('join.step1') }), el('label', { text: w('field.Type') }),
+        choice(['Employee', 'Team lead'], 'Type', [w('word.employee'), w('word.teamLead')]),
+        lbl('Full name'), txt('Full name'),
+        F.Type === 'Team lead' ? [lbl('Display name'), el('div', { cls: 'muted', text: w('join.teamNameHelp') }), txt('Display name')] : null,
+        lbl('DOB', true), date('DOB'), lbl('Email', true), (function () { var e = inputs.Email || el('input', { type: 'email', value: F.Email || '' }); inputs.Email = e; return e; })()];
+    },
+    function () {
+      return [el('h3', { text: w('join.step2') }),
+        lbl('Mobile 1'), num('Mobile 1'), emergencyFor('1'),
+        lbl('Mobile 2', true), num('Mobile 2'), emergencyFor('2'),
+        lbl('Mobile 3', true), num('Mobile 3'), emergencyFor('3'),
+        lbl('Emergency contact name'), txt('Emergency contact name'),
+        lbl('Emergency relation', true), txt('Emergency relation')];
+    },
+    function () {
+      return [el('h3', { text: w('join.step3') }), lbl('Address'), txt('Address', true), lbl('Joining date', true), date('Joining date')];
+    },
+    function () {
+      return [el('h3', { text: w('join.step4') }), lbl('Aadhaar'), num('Aadhaar'), lbl('PAN', true), up('PAN'),
+        lbl('Bank account', true), num('Bank account'), lbl('IFSC', true), up('IFSC'), lbl('Account holder', true), txt('Account holder')];
+    },
+    function () { return [el('h3', { text: w('join.step5') }), photo('Photo'), photo('Aadhaar photo'), photo('PAN photo')]; },
+    function () {
+      return [el('h3', { text: w('join.step6') }), el('label', { text: w('app.newPin') }), pin1, el('label', { text: w('app.newPin2') }), pin2,
+        el('label', { cls: 'check' }, consent, el('span', { text: w('join.consent') }))];
+    }
+  ];
+
+  /** Light checks before moving on; the server checks everything again. */
+  function stepOk() {
+    collect();
+    var need = function (f) { if (!String(F[f] || '').trim()) { toast(fieldName(f) + ': ' + w('err.required')); return false; } return true; };
+    var mob = function (f, req) { var v = String(F[f] || '').replace(/\D/g, ''); if (!v && !req) return true; if (!/^[6-9]\d{9}$/.test(v.slice(-10)) || v.length < 10) { toast(fieldName(f) + ': ' + w('err.mobile')); return false; } return true; };
+    if (step === 0) return need('Full name') && (F.Type !== 'Team lead' || need('Display name'));
+    if (step === 1) {
+      if (!mob('Mobile 1', true) || !mob('Mobile 2') || !mob('Mobile 3')) return false;
+      if (!String(F['Mobile ' + F['Emergency mobile']] || '').trim()) { toast(fieldName('Emergency mobile') + ': ' + w('err.required')); return false; }
+      return need('Emergency contact name');
+    }
+    if (step === 2) return need('Address');
+    if (step === 3) {
+      if (!/^[2-9]\d{11}$/.test(String(F.Aadhaar || '').replace(/\s/g, ''))) { toast(w('err.aadhaar')); return false; }
+      if (F.PAN && !/^[A-Z]{5}\d{4}[A-Z]$/.test(F.PAN)) { toast(w('err.pan')); return false; }
+      if (F.IFSC && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(F.IFSC)) { toast(w('err.ifsc')); return false; }
+      return true;
+    }
+    return true;
+  }
+
+  function submit(btn) {
+    if (!/^\d{4}$/.test(pin1.value)) return toast(w('err.pin'));
+    if (pin1.value !== pin2.value) return toast(w('err.pinMatch'));
+    if (!consent.checked) return toast(w('err.consent'));
+    collect();
+    var form = {}; Object.keys(F).forEach(function (k) { form[k] = F[k]; });
+    form.pin = pin1.value; form.consent = true; form.Language = S.lang;
+    btn.disabled = true; btn.textContent = w('app.wait');
+    call('submitJoin', code || '', adminToken || '', form, P).then(function (r) {
+      show(function () {
+        screen(el('div', { cls: 'card' }, el('h2', { text: '✓ ' + w('app.done') }), el('p', { text: w('join.thanks') }), el('div', { cls: 'muted', text: r.id })),
+          adminToken ? el('button', { cls: 'main', text: w('app.back'), on: { click: adminHome } }) : null);
+      });
+    }).catch(function (e) {
+      btn.disabled = false; btn.textContent = w('app.send');
+      var x = explain(e); toast(x.text);
+      var map = { 'Full name': 0, 'Display name': 0, 'DOB': 0, 'Email': 0, 'Mobile 1': 1, 'Mobile 2': 1, 'Mobile 3': 1, 'Emergency mobile': 1,
+        'Emergency contact name': 1, 'Address': 2, 'Joining date': 2, 'Aadhaar': 3, 'PAN': 3, 'Bank account': 3, 'IFSC': 3 };
+      if (x.field && map[x.field] !== undefined) { step = map[x.field]; render(); }
+    });
+  }
+
+  function render() {
+    var bar = el('div', { cls: 'steps' });
+    steps.forEach(function (s, i) { bar.appendChild(el('span', { cls: i <= step ? 'on' : '' })); });
+    var last = step === steps.length - 1;
+    var nextBtn = el('button', { cls: 'main', text: last ? w('app.send') : w('app.next') });
+    nextBtn.addEventListener('click', function () {
+      if (!stepOk()) return;
+      if (last) return submit(nextBtn);
+      step++; render();
+    });
+    screen(
+      adminToken ? backBtn(adminHome) : null,
+      el('h2', { text: w('join.title') }), bar,
+      el('div', { cls: 'card' }, steps[step](), nextBtn),
+      step > 0 ? el('button', { cls: 'link', text: '← ' + w('app.back'), on: { click: function () { collect(); step--; render(); } } }) : null);
+  }
+  show(render);
+}
+
+/* ----------------------------------------------------------- admin */
+var ADMIN = { tab: 'queue', q: '' };
+
+function adminHome() {
+  busy();
+  call('adminHome', S.token).then(function (h) { ADMIN.me = h.admin; ADMIN.sheetUrl = h.sheetUrl; adminTab(ADMIN.tab); }).catch(fail);
+}
+
+function adminShell(content) {
+  var tabs = el('div', { cls: 'tabs' });
+  [['queue', 'Review'], ['people', 'People'], ['add', 'Add person'], ['link', 'Joining link']].forEach(function (t) {
+    tabs.appendChild(el('button', { cls: ADMIN.tab === t[0] ? 'sel' : '', text: t[1], on: { click: function () { adminTab(t[0]); } } }));
+  });
+  screen(el('div', { cls: 'muted' }, 'Admin: ' + ADMIN.me.name + ' · ',
+      el('a', { href: ADMIN.sheetUrl, target: '_blank', text: 'Open sheet' }), ' · ',
+      el('button', { cls: 'link', text: 'Sign out', on: { click: function () { signOut(false); } } })),
+    tabs, content);
+}
+
+function adminTab(t) {
+  ADMIN.tab = t;
+  if (t === 'add') return joinForm('', S.token);
+  if (t === 'link') {
+    S.redraw = function () { adminTab('link'); };
+    adminShell(el('div', { cls: 'spin', text: w('app.wait') }));
+    return call('adminJoinLink', S.token).then(function (r) {
+      var box = el('input', { type: 'text', value: r.link, readOnly: true });
+      adminShell(el('div', { cls: 'card' }, el('p', { text: 'Send this link to new people. It works for 7 days.' }), box,
+        el('button', { cls: 'main', text: 'Copy link', on: { click: function () { box.select(); try { document.execCommand('copy'); toast('Copied'); } catch (e) {} } } })));
+    }).catch(fail);
+  }
+  if (t === 'people') return adminPeopleView();
+  return adminQueueView();
+}
+
+function adminQueueView() {
+  S.redraw = adminQueueView;
+  adminShell(el('div', { cls: 'spin', text: w('app.wait') }));
+  call('adminQueue', S.token).then(function (q) {
+    var cards = [];
+    if (q.joiners.length) cards.push(el('h3', { text: 'New joiners (' + q.joiners.length + ')' }));
+    q.joiners.forEach(function (j) {
+      cards.push(el('div', { cls: 'card', on: { click: function () { adminPersonView(j.id, true); } } },
+        el('div', { cls: 'kv' }, el('div', {}, el('b', { text: j.name }), el('div', { cls: 'muted', text: j.type + ' · ' + j.mobile + ' · ' + j.created })),
+          el('span', { cls: 'pill wait', text: 'Review →' }))));
+    });
+    cards.push(el('h3', { text: 'Requests (' + q.requests.length + ')' }));
+    if (!q.requests.length) cards.push(el('div', { cls: 'card muted', text: 'Nothing waiting.' }));
+    q.requests.forEach(function (r) { cards.push(requestCard(r)); });
+    adminShell(cards);
+  }).catch(fail);
+}
+
+function requestCard(r) {
+  var reply = el('input', { type: 'text', placeholder: 'Reply (needed when not approving)' });
+  var what;
+  if (r.about === 'My details') {
+    what = el('div', {}, el('div', { text: r.field + ':' }),
+      r.isPhoto ? el('a', { href: r.asked, target: '_blank', text: 'Open new photo' })
+        : el('div', {}, el('span', { cls: 'muted', text: (r.current || '(empty)') + '  →  ' }), el('b', { text: r.asked || '(empty)' })));
+  } else if (r.about === 'My team' && r.team) {
+    what = el('div', {}, el('b', { text: (r.team.action === 'add' ? 'Add member: ' : 'Remove member: ') + r.team.name }),
+      r.team.mobile || r.team.skill ? el('div', { cls: 'muted', text: [r.team.skill, r.team.mobile].filter(String).join(' · ') }) : null);
+  } else {
+    what = el('div', {}, el('b', { text: r.about }), r.field ? el('span', { cls: 'muted', text: ' · ' + r.field }) : null);
+  }
+  var decide = function (ok) {
+    return function () {
+      call('adminDecide', S.token, r.id, ok, reply.value).then(function () { toast(ok ? 'Approved' : 'Rejected'); adminQueueView(); }).catch(fail);
+    };
+  };
+  return el('div', { cls: 'card' },
+    el('div', { cls: 'muted' }, r.date + ' · ' + r.id + ' · ',
+      el('button', { cls: 'link', text: r.person + ' (' + r.personId + ')', on: { click: function () { adminPersonView(r.personId, false); } } })),
+    what, r.note ? el('div', { cls: 'card', style: 'background:#faf9f6;margin:8px 0', text: '“' + r.note + '”' }) : null,
+    reply,
+    el('div', { cls: 'row', style: 'margin-top:8px' }, el('button', { cls: 'ok', text: 'Approve', on: { click: decide(true) } }),
+      el('button', { cls: 'bad', text: 'Reject', on: { click: decide(false) } })));
+}
+
+function adminPeopleView() {
+  S.redraw = adminPeopleView;
+  var q = el('input', { type: 'text', placeholder: 'Search name, ID, mobile', value: ADMIN.q });
+  var list = el('div', {}, el('div', { cls: 'spin', text: w('app.wait') }));
+  var run = function () {
+    ADMIN.q = q.value;
+    call('adminPeople', S.token, q.value).then(function (rows) {
+      list.innerHTML = '';
+      if (!rows.length) list.appendChild(el('div', { cls: 'card muted', text: 'No one found.' }));
+      rows.forEach(function (p) {
+        list.appendChild(el('div', { cls: 'card', on: { click: function () { adminPersonView(p.id, false); } } },
+          el('div', { cls: 'kv' }, el('div', {}, el('b', { text: p.type === 'Team lead' ? p.display || p.name : p.name }),
+            el('div', { cls: 'muted', text: [p.id, p.type === 'Team lead' ? 'Contractor' : p.designation, p.mobile].filter(String).join(' · ') })),
+            el('span', { cls: 'pill ' + p.status.replace(/ .*/, ''), text: p.status }))));
+      });
+    }).catch(fail);
+  };
+  var tmr;
+  q.addEventListener('input', function () { clearTimeout(tmr); tmr = setTimeout(run, 350); });
+  adminShell([q, el('div', { style: 'height:12px' }), list]);
+  run();
+}
+
+function adminPersonView(id, reviewing) {
+  S.redraw = function () { adminPersonView(id, reviewing); };
+  adminShell(el('div', { cls: 'spin', text: w('app.wait') }));
+  call('adminPerson', S.token, id).then(function (p) {
+    var skip = { _sheetLink: 1, _team: 1, _requests: 1 };
+    var rows = Object.keys(p).filter(function (k) { return !skip[k] && p[k] !== ''; }).map(function (k) {
+      var v = p[k];
+      if (k === 'Emergency mobile' && p['Mobile ' + v]) v = v + ' (' + p['Mobile ' + v] + ')';
+      var val = /^https:\/\//.test(v) ? el('a', { href: v, target: '_blank', text: 'Open' }) : el('div', { cls: 'v', text: v });
+      return el('div', { cls: 'kv' }, el('div', { cls: 'k', text: k === 'Type' && v === 'Team lead' ? 'Type (contractor)' : k }), val);
+    });
+    var reply = el('input', { type: 'text', placeholder: 'Note (needed when rejecting)' });
+    var actions = [];
+    if (p.Status === 'Pending review') {
+      var decide = function (ok) {
+        return function () {
+          call('adminDecideJoiner', S.token, id, ok, reply.value).then(function () { toast(ok ? 'Approved' : 'Rejected'); adminTab('queue'); }).catch(fail);
+        };
+      };
+      actions.push(el('div', { cls: 'card' }, el('b', { text: 'New joiner: check the details and photos, then decide.' }), reply,
+        el('div', { cls: 'row', style: 'margin-top:8px' }, el('button', { cls: 'ok', text: 'Approve', on: { click: decide(true) } }),
+          el('button', { cls: 'bad', text: 'Reject', on: { click: decide(false) } }))));
+    }
+    actions.push(el('div', { cls: 'row' },
+      el('a', { href: p._sheetLink, target: '_blank' }, el('button', { type: 'button', text: 'Edit in sheet' })),
+      el('button', { text: 'Reset PIN', on: { click: function () {
+        if (!confirm('Make a new PIN for ' + p['Full name'] + '?')) return;
+        call('adminResetPin', S.token, id).then(function (r) { alert('New PIN for ' + p['Full name'] + ': ' + r.pin + '\nThey will be asked to change it.'); }).catch(fail);
+      } } })));
+    var team = p._team ? el('div', { cls: 'card' }, el('b', { text: 'Team (' + p._team.length + ')' }),
+      p._team.map(function (m) { return el('div', { cls: 'kv' }, el('div', { text: m.name }), el('div', { cls: 'muted', text: [m.skill, m.mobile].filter(String).join(' · ') })); })) : null;
+    var reqs = p._requests && p._requests.length ? el('div', { cls: 'card' }, el('b', { text: 'Requests' }),
+      p._requests.map(function (r) { return el('div', { cls: 'kv' }, el('div', { text: r.date + ' · ' + r.about + (r.field ? ' · ' + r.field : '') }), el('span', { cls: 'pill ' + r.status, text: r.status })); })) : null;
+    adminShell([backBtn(function () { adminTab(reviewing ? 'queue' : ADMIN.tab); }),
+      el('h2', { text: p['Full name'] + ' · ' + p.ID }), actions, el('div', { style: 'height:12px' }), el('div', { cls: 'card' }, rows), team, reqs]);
+  }).catch(fail);
+}
+
+start();
+</script>
+</body>
+</html>

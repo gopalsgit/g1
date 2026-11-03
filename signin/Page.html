@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  body { margin: 0; background: #f6f5f2; color: #1f1d1a; font: 18px/1.45 system-ui, -apple-system, Roboto, "Noto Sans Devanagari", sans-serif; }
+  .box { max-width: 480px; margin: 40px auto; padding: 0 16px; }
+  .card { background: #fff; border: 1px solid #e2dfd8; border-radius: 14px; padding: 20px; }
+  a.btn { display: block; text-align: center; background: #8a3b12; color: #fff; text-decoration: none; padding: 16px; border-radius: 12px; font-weight: 600; margin-top: 16px; }
+  .muted { color: #6b665e; font-size: 15px; }
+  .err { color: #a62b2b; }
+</style>
+</head>
+<body>
+<div class="box"><div class="card">
+<? if (problem) { ?>
+  <p class="err"><?= problem ?></p>
+<? } else { ?>
+  <p>Signed in with Google as<br><b><?= email ?></b></p>
+  <p class="muted">आगे बढ़ने के लिए नीचे दबाएँ / Tap below to continue.</p>
+  <a class="btn" href="<?= link ?>" target="_top">Continue / आगे बढ़ें</a>
+<? } ?>
+</div></div>
+</body>
+</html>
