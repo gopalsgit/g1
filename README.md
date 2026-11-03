@@ -63,6 +63,17 @@ The first time someone uses Google sign-in, Google shows a warning that the app 
 verified (because it is your own private script). Tap *Advanced > Go to Om Team Sign-in*. It
 only asks to see their email address.
 
+**If Google sign-in goes wrong:**
+
+| What you see | Fix |
+| --- | --- |
+| "Sorry, unable to open the file at this time" after Continue | `APP_URL` in the Sign-in project is not the main app's live link. Copy it from the main project's `Deploy > Manage deployments`. |
+| Continue keeps showing the "Signed in with Google as…" page | `APP_URL` is the Sign-in project's own link. Set it to the main app's link. |
+| "This Google account is not linked to anyone" | Add the Gmail to the Admins tab (admins) or to Login Gmail on People (staff). |
+
+The two links have different `AKfycb…` parts; the main one belongs to the project you open
+from the sheet (`Extensions > Apps Script`).
+
 After changing any script file: `Deploy > Manage deployments > Edit > Version: New version`, so
 the link picks up the change.
 

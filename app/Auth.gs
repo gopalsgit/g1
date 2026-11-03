@@ -235,16 +235,25 @@ function saveSetting_(key, value) {
   else appendRow_(TABS.WORDS, { 'Key': 'setting.' + key, 'English / value': value });
 }
 
+function sameLink_(a, b) {
+  var id = function (u) { var m = String(u || '').match(/\/s\/([^/]+)\/exec/); return m ? m[1] : String(u || '').trim(); };
+  return !!a && !!b && id(a) === id(b);
+}
+
 /** Asks for the app's real link. Returns it, or '' if cancelled or wrong. */
 function askAppUrl_(ui) {
-  var res = ui.prompt('App link',
-    'Paste this app\'s link: in the Apps Script editor, Deploy > Manage deployments > Web app URL (it ends in /exec).' +
+  var res = ui.prompt('Main app link',
+    'Paste the MAIN app\'s link: in the Apps Script editor, Deploy > Manage deployments > Web app URL (it ends in /exec).' +
     (appUrl_() ? '\n\nNow saved: ' + appUrl_() + '\nLeave empty to keep it.' : ''),
     ui.ButtonSet.OK_CANCEL);
   if (res.getSelectedButton() !== ui.Button.OK) return '';
   var link = res.getResponseText().trim();
   if (!link) return appUrl_();
   if (!EXEC_URL_RE.test(link)) { ui.alert('That does not look like a web app link ending in /exec.'); return ''; }
+  if (sameLink_(link, setting_('signinUrl'))) {
+    ui.alert('That is the Sign-in project\'s link. Paste the link of THIS project (the one opened from the sheet).');
+    return '';
+  }
   saveSetting_('appUrl', link);
   return link;
 }
@@ -310,13 +319,17 @@ function menuConnectSignin() {
   var ui = SpreadsheetApp.getUi();
   var url = askAppUrl_(ui);
   if (!url) return;
-  var res = ui.prompt('Connect Google sign-in',
-    'Paste the web app link of the separate "Om Team Sign-in" project (see README, step 9). Leave empty to only see the values to copy.',
+  var res = ui.prompt('Sign-in project link',
+    'Now paste the web app link of the separate "Om Team Sign-in" project (see README, step 9). Leave empty to only see the values to copy.',
     ui.ButtonSet.OK_CANCEL);
   if (res.getSelectedButton() !== ui.Button.OK) return;
   var link = res.getResponseText().trim();
   if (link) {
     if (!EXEC_URL_RE.test(link)) { ui.alert('That does not look like a web app link ending in /exec.'); return; }
+    if (sameLink_(link, url)) {
+      ui.alert('That is the main app\'s link. Paste the link of the separate "Om Team Sign-in" project.');
+      return;
+    }
     saveSetting_('signinUrl', link);
   }
   var html = HtmlService.createHtmlOutput('<div style="font:13px/1.5 Arial;padding:12px">' +

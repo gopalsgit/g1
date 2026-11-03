@@ -215,6 +215,12 @@ t('saved app link wins over Google\'s guess', () => {
   assert.ok(G.adminJoinLink(adminToken).link.startsWith('https://script.google.com/macros/s/REAL/exec?join='));
 });
 
+t('main and sign-in links are told apart', () => {
+  assert.ok(G.sameLink_('https://script.google.com/macros/s/ABC/exec', 'https://script.google.com/a/macros/x/s/ABC/exec'));
+  assert.ok(!G.sameLink_('https://script.google.com/macros/s/ABC/exec', 'https://script.google.com/macros/s/XYZ/exec'));
+  assert.ok(!G.sameLink_('', ''));
+});
+
 t('words from the tab override defaults', () => {
   const w = G.findBy_('Settings & words', 'Key', 'word.teamLead');
   G.updateRow_('Settings & words', w._row, { 'English / value': 'Thekedar' });
