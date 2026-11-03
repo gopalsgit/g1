@@ -189,6 +189,123 @@ t('5 wrong PINs lock the login and email admins', () => {
   assert.ok(G.login('9876543210', '1234').token);
 });
 
+
+const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d); };
+
+t('attendance tabs exist and the month view has live formulas', () => {
+  ['Attendance', 'Team attendance', 'Holidays', 'Attendance month'].forEach(n => assert.ok(env.ss.getSheetByName(n), n));
+  G.refreshMonthView_(new Date());
+  const mv = env.ss.getSheetByName('Attendance month');
+  const row = mv.data[2];
+  assert.strictEqual(row[0], empId);
+  assert.ok(String(row[2]).startsWith('=IFERROR(INDEX('));
+  assert.ok(String(row[row.length - 1]).startsWith('=SUMIFS('));
+});
+
+t('check in and going home: first arrival kept, unconfirmed until marked', () => {
+  let r = G.checkIn(staffToken, 'in', { lat: 19.2967, lng: 73.0631, acc: 12 });
+  assert.strictEqual(r.today.status, 'P');
+  assert.ok(/^\d{2}:\d{2}$/.test(r.today.inTime));
+  assert.strictEqual(r.today.confirmed, false);
+  const first = r.today.inTime;
+  r = G.checkIn(staffToken, 'in', null);
+  assert.strictEqual(r.today.inTime, first);
+  r = G.checkIn(staffToken, 'out', null);
+  assert.ok(r.today.outTime);
+  const row = G.findBy_('Attendance', 'Key', empId + '|' + G.todayStr_());
+  assert.strictEqual(row['In location'], '19.29670,73.06310 ±12m');
+  assert.strictEqual(row['Out location'], '');
+  assert.strictEqual(G.getMe(staffToken).today.inTime, first);
+  throwsCode(() => G.checkIn(leadToken, 'in', null), 'E_GENERIC');
+});
+
+t('self check-in switched on counts as confirmed', () => {
+  const p = G.findBy_('People', 'ID', empId);
+  const row = G.findBy_('Attendance', 'Key', empId + '|' + G.todayStr_());
+  env.ss.getSheetByName('Attendance').data[row._row - 1] = [];
+  G.updateRow_('People', p._row, { 'Self check-in': 'yes' });
+  assert.strictEqual(G.checkIn(staffToken, 'in', null).today.confirmed, true);
+  G.updateRow_('People', p._row, { 'Self check-in': 'no' });
+});
+
+let supToken;
+t('only supervisors and admins mark; dates limited for supervisors', () => {
+  throwsCode(() => G.markList(staffToken, ''), 'E_GENERIC');
+  const p = G.findBy_('People', 'ID', empId);
+  G.updateRow_('People', p._row, { Supervisor: 'yes' });
+  supToken = staffToken;
+  assert.ok(G.getMe(supToken).isSupervisor);
+  const L = G.markList(supToken, '');
+  assert.strictEqual(L.people.length, 1); // team leads are not listed
+  assert.strictEqual(L.people[0].status, 'P');
+  throwsCode(() => G.markList(supToken, daysAgo(30)), 'E_DATERANGE');
+  throwsCode(() => G.markList(supToken, daysAgo(-1)), 'E_DATERANGE');
+  throwsCode(() => G.markList(supToken, '2026-13-01x'), 'E_DATE');
+  assert.ok(G.markList(adminToken, daysAgo(30)).people.length >= 0);
+});
+
+t('marking saves status and OT, confirms the day, shows in my month', () => {
+  const day = daysAgo(1);
+  const r = G.saveMarks(supToken, day, [{ id: empId, status: 'H', ot: '0.5' }, { id: leadId, status: 'P' }, { id: empId + 'x', status: 'P' }]);
+  assert.strictEqual(r.saved, 1);
+  throwsCode(() => G.saveMarks(supToken, day, [{ id: empId, status: 'Z' }]), 'E_GENERIC');
+  const row = G.findBy_('Attendance', 'Key', empId + '|' + day);
+  assert.strictEqual(row.Status, 'H');
+  assert.strictEqual(String(row.OT), '0.5');
+  assert.strictEqual(row.Confirmed, 'yes');
+  assert.strictEqual(row.Source, 'Supervisor');
+  G.saveMarks(supToken, G.todayStr_(), [{ id: empId, status: 'P' }]);
+  const today = G.findBy_('Attendance', 'Key', empId + '|' + G.todayStr_());
+  assert.ok(today['In time'], 'supervisor mark keeps the check-in time');
+  assert.strictEqual(today.Confirmed, 'yes');
+  const m = G.myMonth(staffToken, day.slice(0, 7));
+  const d = m.days.find(x => x.date === day);
+  assert.strictEqual(d.status, 'H');
+  assert.strictEqual(d.ot, '0.5');
+  assert.ok(m.totals.H >= 1 && m.totals.ot >= 0.5);
+  assert.ok(G.readTable_('Audit log').some(a => a.Tab === 'Attendance' && a['New value'] === 'H'));
+});
+
+t('holidays and Sundays default correctly', () => {
+  const hday = daysAgo(2);
+  G.appendRow_('Holidays', { Date: G.parseDate_(hday), Holiday: 'Diwali' });
+  const L = G.markList(supToken, hday);
+  assert.strictEqual(L.holiday, 'Diwali');
+  if (L.people.length) assert.strictEqual(L.people[0].status, 'HOL');
+  let sun = new Date(); while (sun.getDay() !== 0) sun.setDate(sun.getDate() - 1);
+  assert.strictEqual(G.defaultStatus_(ymd(sun), {}), 'WO');
+});
+
+t('attendance problem: admin fixes the day from the queue and approves', () => {
+  const day = daysAgo(3);
+  G.reportProblem(staffToken, 'Attendance', day, 'I was here all day');
+  const q = G.adminQueue(adminToken).requests.find(x => x.about === 'Attendance' && x.field === day);
+  assert.ok(q.att && q.att.status === '');
+  G.adminSetAttendance(adminToken, empId, day, 'P', '1', q.id, 'Corrected');
+  const row = G.findBy_('Attendance', 'Key', empId + '|' + day);
+  assert.strictEqual(row.Status, 'P');
+  assert.strictEqual(String(row.OT), '1');
+  assert.strictEqual(row.Source, 'Admin');
+  assert.strictEqual(G.findBy_('Requests', 'Request ID', q.id).Status, 'Approved');
+  throwsCode(() => G.adminSetAttendance(adminToken, leadId, day, 'P', '', '', ''), 'E_GENERIC');
+});
+
+t('team leads record their own team, separately from pay', () => {
+  G.requestTeamChange(leadToken, 'add', { name: 'Imran', skill: 'Cutting' }, '');
+  const q = G.adminQueue(adminToken).requests.find(x => x.about === 'My team');
+  G.adminDecide(adminToken, q.id, true, '');
+  const L = G.teamMarkList(leadToken, '');
+  assert.strictEqual(L.members.length, 1);
+  assert.strictEqual(L.members[0].status, '');
+  G.saveTeamMarks(leadToken, L.date, [{ id: L.members[0].id, status: 'A' }, { id: 'M-9999', status: 'P' }]);
+  G.saveTeamMarks(leadToken, L.date, [{ id: L.members[0].id, status: 'H' }]);
+  assert.strictEqual(G.teamMarkList(leadToken, L.date).members[0].status, 'H');
+  assert.strictEqual(G.readTable_('Team attendance').length, 1);
+  assert.strictEqual(G.readTable_('Attendance').filter(r => r['Person ID'] === L.members[0].id).length, 0);
+  throwsCode(() => G.teamMarkList(staffToken, ''), 'E_GENERIC');
+});
+
 t('person who left is signed out', () => {
   const p = G.findBy_('People', 'ID', empId);
   G.updateRow_('People', p._row, { Status: 'Left' });

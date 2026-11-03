@@ -19,11 +19,15 @@ function adminQueue(token) {
   var requests = readTable_(TABS.REQUESTS).filter(function (r) { return r['Status'] === 'Open'; }).map(function (r) {
     var field = String(r['Field']);
     var asked = String(r['Asked value']);
-    var team = null;
+    var team = null, att = null;
+    if (r['About'] === 'Attendance' && /^\d{4}-\d{2}-\d{2}$/.test(field)) {
+      var cur = attendanceOn_(r['Person ID'], field);
+      att = { date: field, status: cur ? cur.status : '', ot: cur ? cur.ot : '', inTime: cur ? cur.inTime : '', outTime: cur ? cur.outTime : '' };
+    }
     if (r['About'] === 'My team') { try { team = JSON.parse(asked); } catch (e) { team = null; } }
     return {
       id: String(r['Request ID']), date: fmtDate_(r['Date']), personId: String(r['Person ID']), person: String(r['Person']),
-      about: String(r['About']), field: field, current: String(r['Current value']), asked: asked, team: team,
+      about: String(r['About']), field: field, current: String(r['Current value']), asked: asked, team: team, att: att,
       isPhoto: PHOTO_FIELDS.indexOf(field) >= 0, note: String(r['Note'])
     };
   });
