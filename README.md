@@ -7,8 +7,8 @@ the sheet or in the admin screens of the same link.
 Plan: [Om Textiles Team Register: Plan](https://claude.ai/artifact/HuLea1k3jbPJ9DpEbkqKep)
 
 **Built so far:** Phase 1 (people records, sign-in, joining form with photos, change requests,
-team members for team leads, "report a problem", admin review queue) and Phase 2 (attendance).
-Money, salary and payslips (Phase 3) come next.
+team members for team leads, "report a problem", admin review queue), Phase 2 (attendance) and
+Phase 3 (pay setup, advances and incentives, salary run, payslips, team lead money).
 
 ## Folders
 
@@ -32,6 +32,10 @@ Money, salary and payslips (Phase 3) come next.
 | Team attendance | A team lead's member per day, for record only, never used for pay |
 | Holidays | Date and name. Type holidays here; they show as HOL by default |
 | Attendance month | Read-only grid for one month with totals. `Om Team > Refresh attendance month` |
+| Pay setup | Per employee: Monthly salary or Daily rate, PF / ESI yes-no, UAN, ESI number, Effective from. Add a new row for a raise; the latest one on or before the month end is used |
+| Advances & incentives | Advance (with a monthly cut), Incentive, Bonus, Other deduction |
+| Salary | One row per employee per month, made by *Run salary*; locked rows never change |
+| Team lead ledger | Money paid to / received from a team lead (contractor), what for, work done, work pending |
 
 ## One-time setup (about 20 minutes)
 
@@ -39,7 +43,7 @@ Money, salary and payslips (Phase 3) come next.
 2. `Extensions > Apps Script`. In `Project Settings`, tick *Show "appsscript.json" manifest file*,
    then paste `app/appsscript.json`.
 3. Add the files from `app/`: `Setup.gs`, `Data.gs`, `Auth.gs`, `Words.gs`, `People.gs`,
-   `Admin.gs`, `Attendance.gs`, `WebApp.gs` (`File > + > Script`, drop the `.gs`), and `App` (`File > + > HTML`,
+   `Admin.gs`, `Attendance.gs`, `Money.gs`, `WebApp.gs` (`File > + > Script`, drop the `.gs`), and `App` (`File > + > HTML`,
    the name must be exactly `App`).
 4. Save. Run `setupWorkbook` once and approve the permission prompt. It makes the tabs, the
    private Drive folder for documents, and the signing secret.
@@ -126,6 +130,38 @@ or *Email*.
   record only.
 - About 50 people × 365 days is ~18,000 rows a year. Move old years to another sheet once a year
   to keep the app quick.
+
+## Salary and money
+
+How pay is worked out (rates and limits are settings on *Settings & words*):
+
+| | |
+| --- | --- |
+| Monthly | monthly salary ÷ days in month × payable days. Payable = present + ½ × half days + Sundays + holidays while employed |
+| Daily | daily rate × (present + ½ × half days). Sundays and holidays are paid only if worked (marked P) |
+| Leave, absent, not marked | unpaid |
+| Overtime | OT days (½ or 1 each) × daily rate (monthly: salary ÷ days in month) |
+| PF (if yes) | 12% of earned basic, basic capped at ₹15,000 |
+| ESI (if yes) | 0.75% of gross, rounded up, when gross ≤ ₹21,000 |
+| Advance | the monthly cuts set on open advances, never more than owed or than net pay |
+
+Steps each month, in the admin *Salary* tab:
+
+1. Make sure attendance is marked (the run lists days not marked) and Pay setup is filled.
+2. **Run salary.** You can run again as often as needed until you lock.
+3. To adjust someone, edit *Rate, Payable days, OT days, Incentive, Other deduction* or
+   *Advance recovered* on their Salary row, then **Recalculate**.
+4. **Lock + payslips.** Rows are final; payslip PDFs go to Drive `Payslips/<month>/` in the
+   private documents folder. Staff see their payslip in *My money*.
+5. **Mark all paid** with the date and Cash / Bank / UPI.
+
+The admin *Money* tab gives advances, incentives, bonuses and deductions, and records team lead
+payments with *what for*, *work done* and *work pending*. Team leads see their entries and
+running balance in *My money*; employees see this month's estimate, advance still owed and their
+payslips.
+
+PF and ESI here are the employee's share only, as a simple deduction. Check the rates and the
+ESI rule with your accountant; change them in Settings without code.
 
 ## Voice
 

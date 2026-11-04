@@ -84,7 +84,8 @@ function makeEnv() {
       base64EncodeWebSafe: (s) => Buffer.from(s, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
       base64DecodeWebSafe: (s) => signed(Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64')),
       base64Decode: (s) => signed(Buffer.from(s, 'base64')),
-      newBlob: (bytes, type, name) => ({ type, name, getDataAsString: () => Buffer.from(bytes.map(b => b & 0xff)).toString('utf8') }),
+      newBlob: (bytes, type, name) => ({ type, name, getDataAsString: () => Buffer.from(bytes.map(b => b & 0xff)).toString('utf8'),
+        getAs: (t) => ({ type: t, html: bytes, setName(n) { this.name = n; return this; } }) }),
       getUuid: () => crypto.randomUUID(),
       formatDate: (d, tz, f) => {
         const p = n => String(n).padStart(2, '0');
@@ -125,6 +126,19 @@ module.exports = { makeEnv, seed() {
   G.appendRow_('Holidays', { Date: G.parseDate_(ago(4)), Holiday: 'Diwali' });
   [1, 2].forEach(n => G.saveMarks(adm, ago(n), [{ id: e.id, status: n === 1 ? 'H' : 'P', ot: n === 2 ? '1' : '' }]));
   G.checkIn(st, 'in', { lat: 19.3, lng: 73.06, acc: 10 });
+  G.updateRow_('People', G.findBy_('People', 'ID', e.id)._row, { 'Joining date': G.parseDate_('2026-10-01') });
+  G.appendRow_('Pay setup', { 'Person ID': e.id, 'Pay type': 'Monthly', 'Monthly salary': 18600, PF: 'yes', ESI: 'yes', 'Effective from': G.parseDate_('2026-10-01') });
+  for (let d = 1; d <= 31; d++) {
+    const ds = '2026-10-' + String(d).padStart(2, '0');
+    if (new Date(2026, 9, d).getDay() !== 0) G.saveMarks(adm, ds, [{ id: e.id, status: d === 7 ? 'A' : d === 8 ? 'H' : 'P', ot: d === 9 ? '1' : '' }]);
+  }
+  G.adminAddMoney(adm, { personId: e.id, type: 'Advance', amount: 6000, recovery: 2000, date: '2026-10-05', note: 'Medical' });
+  G.adminAddMoney(adm, { personId: e.id, type: 'Incentive', amount: 1000, date: '2026-10-25', note: 'Festival order' });
+  G.adminRunSalary(adm, '2026-10'); G.adminLockSalary(adm, '2026-10'); G.adminMarkPaid(adm, '2026-10', '2026-11-01', 'Bank', '');
+  G.adminAddMoney(adm, { personId: e.id, type: 'Incentive', amount: 500, date: ago(1), note: 'Quick delivery' });
+  G.adminAddLedger(adm, { leadId: l.id, direction: 'paid', amount: 8000, date: '2026-10-10', whatFor: 'Kurta batch 7', workDone: '150 kurtas stitched', workPending: '50 kurtas' });
+  G.adminAddLedger(adm, { leadId: l.id, direction: 'received', amount: 1500, date: '2026-10-20', whatFor: 'Unused cloth returned' });
+  G.adminAddLedger(adm, { leadId: l.id, direction: 'paid', amount: 4000, date: ago(1), whatFor: 'Kurta batch 7 balance', workDone: '50 kurtas done', workPending: '' });
   G.requestChange(st, 'Address', 'Room 4, Surat', 'moved house');
   G.reportProblem(st, 'Attendance', ago(1), 'Marked half day but I was here all day');
   G.submitJoin(G.makeJoinCode_(7), '', { Type: 'Employee', 'Full name': 'Anita Devi', 'Mobile 1': '9811111111', 'Emergency mobile': '1',
