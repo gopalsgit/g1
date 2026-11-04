@@ -56,6 +56,12 @@ function getMe(token) {
     requests: requests
   };
   if (p['Type'] === 'Team lead') out.team = teamOf_(p['ID']);
+  if (p['Type'] === 'Employee') {
+    out.today = attendanceOn_(p['ID'], todayStr_());
+    out.todayDate = todayStr_();
+    out.autoCheckIn = String(setting_('autoCheckIn')).toLowerCase() === 'yes';
+  }
+  out.isSupervisor = String(p['Supervisor']).toLowerCase() === 'yes';
   return out;
 }
 

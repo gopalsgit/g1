@@ -10,7 +10,11 @@ var TABS = {
   REQUESTS: 'Requests',
   ADMINS: 'Admins',
   WORDS: 'Settings & words',
-  AUDIT: 'Audit log'
+  AUDIT: 'Audit log',
+  ATT: 'Attendance',
+  TEAM_ATT: 'Team attendance',
+  HOLIDAYS: 'Holidays',
+  MONTH: 'Attendance month'
 };
 
 var SCHEMA = {};
@@ -33,22 +37,37 @@ SCHEMA[TABS.REQUESTS] = [
 SCHEMA[TABS.ADMINS] = ['Gmail', 'Name', 'Active', 'PIN hash', 'Last login', 'Notes'];
 SCHEMA[TABS.WORDS] = ['Key', 'English / value', 'Hindi', 'Notes'];
 SCHEMA[TABS.AUDIT] = ['When', 'Who', 'Tab', 'Record', 'Field', 'Old value', 'New value', 'Via'];
+SCHEMA[TABS.ATT] = [
+  'Date', 'Person ID', 'Name', 'Status', 'OT', 'In time', 'Out time', 'In location', 'Out location',
+  'Source', 'Marked by', 'Confirmed', 'Remarks', 'Updated at', 'Key'
+];
+SCHEMA[TABS.TEAM_ATT] = ['Date', 'Team lead ID', 'Team lead', 'Member ID', 'Member name', 'Status', 'Marked at', 'Key'];
+SCHEMA[TABS.HOLIDAYS] = ['Date', 'Holiday'];
 
 var PERSON_TYPES = ['Employee', 'Team lead'];
 var PERSON_STATUS = ['Pending review', 'Active', 'Left', 'Rejected'];
 var REQUEST_ABOUT = ['My details', 'My team', 'Attendance', 'Salary', 'Advance', 'Other'];
 var REQUEST_STATUS = ['Open', 'Approved', 'Rejected'];
 var LANGS = ['en', 'hi'];
+/** P present, A absent, H half day, L leave, WO weekly off (Sunday), HOL holiday. */
+var ATT_STATUS = ['P', 'A', 'H', 'L', 'WO', 'HOL'];
+var TEAM_ATT_STATUS = ['P', 'A', 'H'];
+var OT_VALUES = ['', '0.5', '1'];
 
 /** Columns kept as plain text so leading zeros and long numbers survive. */
 var TEXT_COLS = {
   'People': ['Mobile 1', 'Mobile 2', 'Mobile 3', 'Aadhaar', 'PAN', 'Bank account', 'IFSC', 'PIN hash'],
   'Team members': ['Mobile'],
-  'Admins': ['PIN hash']
+  'Admins': ['PIN hash'],
+  'Attendance': ['In time', 'Out time', 'Key', 'Person ID'],
+  'Team attendance': ['Key']
 };
 var DATE_COLS = {
   'People': ['DOB', 'Joining date', 'Exit date', 'Consent date'],
-  'Requests': ['Date', 'Closed on']
+  'Requests': ['Date', 'Closed on'],
+  'Attendance': ['Date'],
+  'Team attendance': ['Date'],
+  'Holidays': ['Date']
 };
 
 function onOpen() {
@@ -56,6 +75,7 @@ function onOpen() {
     .addItem('Set PIN for selected person', 'menuSetPersonPin')
     .addItem('Set my admin PIN', 'menuSetAdminPin')
     .addItem('Make a joining link', 'menuJoinLink')
+    .addItem('Refresh attendance month', 'refreshMonthView')
     .addSeparator()
     .addItem('Show app link', 'showAppLink')
     .addItem('Connect Google sign-in', 'menuConnectSignin')
@@ -70,6 +90,7 @@ function setupWorkbook() {
   Object.keys(SCHEMA).forEach(function (name) { ensureTab_(ss, name, SCHEMA[name]); });
   applyValidations_(ss);
   seedWords_();
+  refreshMonthView_(new Date());
   var audit = ss.getSheetByName(TABS.AUDIT);
   if (!audit.isSheetHidden()) audit.hideSheet();
   var first = ss.getSheets()[0];
@@ -160,7 +181,18 @@ function applyValidations_(ss) {
   };
   colour(p, 'Status', { 'Pending review': '#f9eeda', 'Active': '#e5f4e4', 'Left': '#f0efec', 'Rejected': '#fbebeb' });
   colour(r, 'Status', { 'Open': '#f9eeda', 'Approved': '#e5f4e4', 'Rejected': '#fbebeb' });
+
+  var at = ss.getSheetByName(TABS.ATT);
+  var ast = colRange_(at, 'Status'); if (ast) ast.setDataValidation(listRule_(ATT_STATUS));
+  var aot = colRange_(at, 'OT'); if (aot) aot.setDataValidation(listRule_(['0.5', '1']));
+  var acf = colRange_(at, 'Confirmed'); if (acf) acf.setDataValidation(listRule_(['yes', 'no']));
+  colour(at, 'Status', ATT_COLOURS);
+  var ta = ss.getSheetByName(TABS.TEAM_ATT);
+  var tst = colRange_(ta, 'Status'); if (tst) tst.setDataValidation(listRule_(TEAM_ATT_STATUS));
+  colour(ta, 'Status', ATT_COLOURS);
 }
+
+var ATT_COLOURS = { 'P': '#e5f4e4', 'A': '#fbebeb', 'H': '#f9eeda', 'L': '#e7f1fb', 'WO': '#f0efec', 'HOL': '#efedff' };
 
 function a1Col_(range) {
   return range.getA1Notation().replace(/[0-9]+.*$/, '');

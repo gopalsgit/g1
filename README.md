@@ -6,9 +6,9 @@ the sheet or in the admin screens of the same link.
 
 Plan: [Om Textiles Team Register: Plan](https://claude.ai/artifact/HuLea1k3jbPJ9DpEbkqKep)
 
-**This is Phase 1:** people records, sign-in, joining form with photos, change requests,
-team members for team leads, "report a problem", and the admin review queue. Attendance
-(Phase 2) and money, salary and payslips (Phase 3) come next.
+**Built so far:** Phase 1 (people records, sign-in, joining form with photos, change requests,
+team members for team leads, "report a problem", admin review queue) and Phase 2 (attendance).
+Money, salary and payslips (Phase 3) come next.
 
 ## Folders
 
@@ -28,6 +28,10 @@ team members for team leads, "report a problem", and the admin review queue. Att
 | Admins | Admin Gmail, active yes/no, scrambled PIN |
 | Settings & words | Settings, and every screen word in English and Hindi. Change wording here. |
 | Audit log (hidden) | Every change made through the app: who, when, old and new value |
+| Attendance | Employee per day: P / A / H (half) / L (leave) / WO (Sunday) / HOL, OT (0.5 or 1 day), in and out time and location |
+| Team attendance | A team lead's member per day, for record only, never used for pay |
+| Holidays | Date and name. Type holidays here; they show as HOL by default |
+| Attendance month | Read-only grid for one month with totals. `Om Team > Refresh attendance month` |
 
 ## One-time setup (about 20 minutes)
 
@@ -35,7 +39,7 @@ team members for team leads, "report a problem", and the admin review queue. Att
 2. `Extensions > Apps Script`. In `Project Settings`, tick *Show "appsscript.json" manifest file*,
    then paste `app/appsscript.json`.
 3. Add the files from `app/`: `Setup.gs`, `Data.gs`, `Auth.gs`, `Words.gs`, `People.gs`,
-   `Admin.gs`, `WebApp.gs` (`File > + > Script`, drop the `.gs`), and `App` (`File > + > HTML`,
+   `Admin.gs`, `Attendance.gs`, `WebApp.gs` (`File > + > Script`, drop the `.gs`), and `App` (`File > + > HTML`,
    the name must be exactly `App`).
 4. Save. Run `setupWorkbook` once and approve the permission prompt. It makes the tabs, the
    private Drive folder for documents, and the signing secret.
@@ -101,6 +105,27 @@ or *Email*.
 - *Reset PIN* makes a new 4-digit PIN, shown once.
 - Admins get an email for each new joiner and each locked login (turn off with
   `setting.alertAdmins` = `no`).
+
+## Attendance
+
+- **Employees** see two big buttons on their home screen: *I have arrived* and *Going home*. The
+  time is saved, and the location too if the phone allows it (nothing is blocked if not).
+  The first arrival of the day is kept. With `setting.autoCheckIn` = `yes`, the arrival is saved
+  as soon as they open the app each day.
+- Their own taps count only as "waiting for supervisor" unless *Self check-in* is `yes` on their
+  People row.
+- **Supervisors** (*Supervisor* = `yes` on People) get *Mark attendance*: everyone listed for a
+  date, already set to Present (Sundays WO, holidays HOL). One tap per person changes it; OT is
+  a half or full extra day. They may mark today and the last 7 days (`setting.markDaysBack`).
+  Admins mark any past day from the admin *Attendance* tab.
+- **My attendance** shows a month calendar with colours and totals. Dashed days are waiting for
+  the supervisor.
+- **Attendance problems** come into the review queue with the day as it stands now. The admin
+  picks the right status and OT and taps *Set this day and approve*.
+- **Team leads** get *Team attendance* for their own members: Present / Absent / Half day, for
+  record only.
+- About 50 people × 365 days is ~18,000 rows a year. Move old years to another sheet once a year
+  to keep the app quick.
 
 ## Voice
 

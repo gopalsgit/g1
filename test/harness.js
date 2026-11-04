@@ -119,9 +119,15 @@ module.exports = { makeEnv, seed() {
   G.adminDecide(adm, G.adminQueue(adm).requests[0].id, true, '');
   G.requestTeamChange(lead, 'add', { name: 'Imran', skill: 'Cutting' }, '');
   const st = G.login('9876543210', '1234').token;
+  G.updateRow_('People', G.findBy_('People', 'ID', e.id)._row, { Supervisor: 'yes' });
+  const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const ago = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return ymd(d); };
+  G.appendRow_('Holidays', { Date: G.parseDate_(ago(4)), Holiday: 'Diwali' });
+  [1, 2].forEach(n => G.saveMarks(adm, ago(n), [{ id: e.id, status: n === 1 ? 'H' : 'P', ot: n === 2 ? '1' : '' }]));
+  G.checkIn(st, 'in', { lat: 19.3, lng: 73.06, acc: 10 });
   G.requestChange(st, 'Address', 'Room 4, Surat', 'moved house');
-  G.reportProblem(st, 'Attendance', '2026-11-02', 'Marked absent but I was present');
+  G.reportProblem(st, 'Attendance', ago(1), 'Marked half day but I was here all day');
   G.submitJoin(G.makeJoinCode_(7), '', { Type: 'Employee', 'Full name': 'Anita Devi', 'Mobile 1': '9811111111', 'Emergency mobile': '1',
     'Emergency contact name': 'Mohan', Address: 'Kalyan', Aadhaar: AADHAAR, consent: true, pin: '5555' }, {});
-  return { G, tokens: { lead, join: G.makeJoinCode_(7), g: G.sign_({ k: 'g', e: 'gopal@gmail.com', x: Date.now() + 600000 }) } };
+  return { G, tokens: { staff: st, lead, join: G.makeJoinCode_(7), g: G.sign_({ k: 'g', e: 'gopal@gmail.com', x: Date.now() + 600000 }) } };
 } };

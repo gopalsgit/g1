@@ -68,6 +68,33 @@
   .tabs button.sel { background: var(--brand); color: #fff; border-color: var(--brand); }
   .bigpin { letter-spacing: 10px; text-align: center; font-size: 26px !important; }
   a { color: var(--brand); }
+  .checkin { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .checkin button { padding: 18px 8px; font-size: 18px; font-weight: 600; border-radius: 16px; }
+  .checkin .in { background: var(--ok); color: #fff; border-color: var(--ok); }
+  .checkin .out { background: var(--bad-bg); color: var(--bad); border-color: #e9c4c4; }
+  .checkin .done { background: var(--card); color: var(--muted); border-color: var(--line); font-weight: normal; }
+  .s-P { background: var(--ok-bg); color: var(--ok); } .s-A { background: var(--bad-bg); color: var(--bad); }
+  .s-H { background: var(--wait-bg); color: var(--wait); } .s-L { background: #e7f1fb; color: #1d5b94; }
+  .s-WO { background: var(--soft); color: var(--muted); } .s-HOL { background: #efedff; color: #5b49b0; }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal div { border-radius: 8px; min-height: 52px; padding: 4px; font-size: 13px; text-align: center; background: var(--card); border: 1px solid var(--line); }
+  .cal div b { display: block; font-size: 15px; }
+  .cal .wd { min-height: 0; background: none; border: 0; color: var(--muted); font-size: 12px; }
+  .cal .blank { background: none; border: 0; }
+  .cal .unc { outline: 2px dashed var(--wait); outline-offset: -3px; }
+  .totals { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .totals span { padding: 6px 10px; border-radius: 10px; font-size: 15px; }
+  .seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 8px; }
+  .seg.three { grid-template-columns: repeat(3, 1fr); }
+  .seg button { padding: 10px 2px; font-size: 14px; border-radius: 10px; }
+  .seg button.sel { font-weight: 700; border-width: 2px; }
+  .seg button.sel.s-P { border-color: var(--ok); } .seg button.sel.s-A { border-color: var(--bad); }
+  .seg button.sel.s-H { border-color: var(--wait); } .seg button.sel.s-L { border-color: #1d5b94; }
+  .seg button.sel.s-WO, .seg button.sel.s-HOL { border-color: var(--muted); }
+  .seg button.sel.ot { background: #fbf3ee; border-color: var(--brand); }
+  .person { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .person:last-child { border-bottom: 0; }
+  .sticky { position: sticky; bottom: 8px; }
 </style>
 </head>
 <body>
@@ -131,7 +158,7 @@ function call(fn) {
 
 var CODES = { E_SIGNIN: 'err.signin', E_LOCKED: 'err.locked', E_BADLOGIN: 'err.badLogin', E_PENDING: 'err.pending',
   E_INACTIVE: 'err.inactive', E_NOGMAIL: 'err.noGmail', E_NOADMINPIN: 'err.noAdminPin', E_PIN: 'err.pin',
-  E_MOBILE: 'err.mobile', E_BADJOIN: 'join.badLink', E_ALREADY: 'err.already', E_GENERIC: 'err.generic' };
+  E_MOBILE: 'err.mobile', E_BADJOIN: 'join.badLink', E_ALREADY: 'err.already', E_GENERIC: 'err.generic', E_DATE: 'err.dateRange', E_DATERANGE: 'err.dateRange' };
 
 /** Turns a server error into words. Field errors also return which field. */
 function explain(err) {
@@ -314,7 +341,41 @@ function home() {
     if (d.me.Language && !load('omt.lang')) S.lang = d.me.Language;
     if (d.mustChangePin) return changePinScreen(true);
     show(homeView);
+    if (d.autoCheckIn && d.me.type === 'Employee' && !(d.today && d.today.inTime)) doCheck('in', true);
   }).catch(fail);
+}
+
+/** Asks the phone for its location; gives null if refused or slow. */
+function getLoc(cb) {
+  if (!navigator.geolocation) return cb(null);
+  var done = false;
+  var finish = function (v) { if (!done) { done = true; cb(v); } };
+  setTimeout(function () { finish(null); }, 9000);
+  try {
+    navigator.geolocation.getCurrentPosition(function (p) {
+      finish({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy });
+    }, function () { finish(null); }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+  } catch (e) { finish(null); }
+}
+
+function doCheck(kind, quiet) {
+  getLoc(function (loc) {
+    call('checkIn', S.token, kind, loc).then(function (r) {
+      S.data.today = r.today;
+      if (!quiet) toast(w('att.saved') + (loc ? '' : ' · ' + w('att.locNo')));
+      if (S.redraw === homeView) homeView();
+    }).catch(fail);
+  });
+}
+
+function checkCard() {
+  var t = S.data.today || {};
+  var inB = el('button', { cls: t.inTime ? 'done' : 'in', text: t.inTime ? w('att.inAt') + ' ' + t.inTime : '✅ ' + w('att.arrived') });
+  var outB = el('button', { cls: t.outTime ? 'done' : 'out', text: t.outTime ? w('att.outAt') + ' ' + t.outTime : '🏠 ' + w('att.leaving') });
+  if (!t.inTime) inB.addEventListener('click', function () { inB.disabled = true; doCheck('in'); });
+  outB.addEventListener('click', function () { outB.disabled = true; doCheck('out'); });
+  var note = t.status && !t.confirmed ? el('div', { cls: 'muted', text: w('att.waiting') }) : null;
+  return el('div', {}, el('div', { cls: 'checkin' }, inB, outB), note);
 }
 
 function tile(icon, label, onClick, off, sub) {
@@ -328,8 +389,11 @@ function homeView() {
   var open = (S.data.requests || []).filter(function (r) { return r.status === 'Open'; }).length;
   screen(
     el('h2', { text: w('app.hello') + ', ' + (lead ? me['Display name'] || me['Full name'] : me['Full name']) }),
+    lead ? null : checkCard(),
     el('div', { cls: 'tiles' },
-      lead ? tile('👥', w('home.team'), teamScreen) : tile('🕘', w('home.today'), soon, true, w('home.soon')),
+      lead ? tile('👥', w('home.team'), teamScreen) : tile('📅', w('att.mine'), function () { myAttendanceScreen(); }),
+      lead ? tile('🗓️', w('att.markTeam'), function () { teamAttScreen(); }) : null,
+      S.data.isSupervisor && !lead ? tile('📝', w('home.mark'), function () { markScreen(); }) : null,
       tile('🪪', w('home.details'), detailsScreen),
       tile('💰', w('home.money'), soon, true, w('home.soon')),
       tile('⚠️', w('home.problem'), problemScreen),
@@ -515,6 +579,127 @@ function addMemberScreen() {
   });
 }
 
+
+/* ------------------------------------------------------ attendance */
+var ST = ['P', 'A', 'H', 'L'];
+function stLabel(code) { return w('st.' + code); }
+
+function myAttendanceScreen(month) {
+  busy();
+  call('myMonth', S.token, month || '').then(function (m) {
+    show(function () {
+      var y = Number(m.month.slice(0, 4)), mo = Number(m.month.slice(5, 7));
+      var shift = function (n) { var d = new Date(y, mo - 1 + n, 1); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); };
+      var title = new Date(y, mo - 1, 1).toLocaleDateString(S.lang === 'hi' ? 'hi-IN' : 'en-IN', { month: 'long', year: 'numeric' });
+      var cal = el('div', { cls: 'cal' });
+      var wk = S.lang === 'hi' ? ['रवि', 'सोम', 'मंगल', 'बुध', 'गुरु', 'शुक्र', 'शनि'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      wk.forEach(function (x) { cal.appendChild(el('div', { cls: 'wd', text: x })); });
+      for (var i = 0; i < m.days[0].weekday; i++) cal.appendChild(el('div', { cls: 'blank' }));
+      m.days.forEach(function (d) {
+        var cls = d.status ? 's-' + d.status : '';
+        if (d.status && d.confirmed === false) cls += ' unc';
+        cal.appendChild(el('div', { cls: cls, title: d.holiday || '' }, el('b', { text: d.day }),
+          d.status ? (d.status === 'H' ? '½' : d.status) : '', d.ot ? el('div', { text: '+' + (d.ot === '0.5' ? '½' : d.ot) + ' OT' }) : null));
+      });
+      var t = m.totals;
+      var totals = el('div', { cls: 'totals' },
+        ['P', 'H', 'A', 'L', 'WO', 'HOL'].filter(function (k) { return t[k]; }).map(function (k) { return el('span', { cls: 's-' + k, text: stLabel(k) + ': ' + t[k] }); }),
+        t.ot ? el('span', { cls: 's-WO', text: w('att.ot') + ': ' + t.ot }) : null,
+        t.unmarked ? el('span', { cls: 's-WO', text: w('att.notMarked') + ': ' + t.unmarked }) : null);
+      screen(backBtn(), el('h2', { text: w('att.mine') }),
+        el('div', { cls: 'row', style: 'align-items:center;margin-bottom:10px' },
+          el('b', { text: title, style: 'text-align:center' }),
+          el('button', { text: '◀', on: { click: function () { myAttendanceScreen(shift(-1)); } } }),
+          el('button', { text: '▶', on: { click: function () { myAttendanceScreen(shift(1)); } } })),
+        el('div', { cls: 'card' }, cal, totals),
+        el('button', { cls: 'link', text: '⚠️ ' + w('home.problem'), on: { click: problemScreen } }));
+    });
+  }).catch(fail);
+}
+
+function segButtons(codes, current, onPick, extraCls) {
+  var box = el('div', { cls: 'seg' + (codes.length === 3 ? ' three' : '') });
+  codes.forEach(function (c) {
+    var b = el('button', { type: 'button', cls: (extraCls ? extraCls : 's-' + c.code) + (current === c.code ? ' sel' : ''), text: c.label });
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(box.children, function (x) { x.classList.remove('sel'); });
+      b.classList.add('sel'); onPick(c.code);
+    });
+    box.appendChild(b);
+  });
+  return box;
+}
+
+/** Supervisor and admin screen: everyone on one list for one date. */
+function markScreen(date, asAdmin) {
+  var draw = function (L) {
+    var marks = {};
+    L.people.forEach(function (p) { marks[p.id] = { id: p.id, status: p.status, ot: p.ot || '' }; });
+    var min = new Date(); min.setDate(min.getDate() - L.daysBack);
+    var dateIn = el('input', { type: 'date', value: L.date, max: L.today, min: min.toISOString().slice(0, 10) });
+    dateIn.addEventListener('change', function () { if (dateIn.value) markScreen(dateIn.value, asAdmin); });
+    var codes = ST.slice();
+    if (L.sunday) codes = codes.concat(['WO']);
+    if (L.holiday) codes = codes.concat(['HOL']);
+    var rows = L.people.map(function (p) {
+      var info = [p.designation, p.inTime ? w('att.inAt') + ' ' + p.inTime : '', p.outTime ? w('att.outAt') + ' ' + p.outTime : '']
+        .filter(String).join(' · ');
+      var segS = segButtons(codes.map(function (c) { return { code: c, label: stLabel(c) }; }), p.status, function (c) { marks[p.id].status = c; });
+      if (codes.length > 4) segS.style.gridTemplateColumns = 'repeat(' + Math.min(codes.length, 5) + ', 1fr)';
+      var segO = segButtons([{ code: '', label: w('att.otNone') }, { code: '0.5', label: '+' + w('att.otHalf') }, { code: '1', label: '+' + w('att.otFull') }],
+        p.ot || '', function (c) { marks[p.id].ot = c; }, 'ot');
+      return el('div', { cls: 'person' },
+        el('div', { cls: 'kv', style: 'border:0;padding:0' }, el('b', { text: p.name }),
+          p.marked ? el('span', { cls: 'pill Approved', text: '✓' }) : p.selfOnly ? el('span', { cls: 'pill wait', text: w('att.waiting') }) : null),
+        info ? el('div', { cls: 'muted', text: info }) : null, segS,
+        el('details', {}, el('summary', { cls: 'muted', text: w('att.ot') }), segO));
+    });
+    var save = el('button', { cls: 'main sticky', text: w('app.save') + ' (' + L.people.length + ')' });
+    save.addEventListener('click', function () {
+      save.disabled = true;
+      call('saveMarks', S.token, L.date, Object.keys(marks).map(function (k) { return marks[k]; }))
+        .then(function (r) { toast(w('att.saved') + ': ' + r.saved); markScreen(L.date, asAdmin); })
+        .catch(function (e) { save.disabled = false; fail(e); });
+    });
+    var body = [el('h2', { text: w('att.mark') }),
+      el('div', { cls: 'card' }, el('label', { text: w('att.date') }), dateIn,
+        L.holiday ? el('div', { cls: 'pill s-HOL', style: 'margin-top:8px', text: w('att.holiday') + ': ' + L.holiday }) : null,
+        L.sunday ? el('div', { cls: 'pill s-WO', style: 'margin-top:8px', text: w('att.sunday') }) : null,
+        el('div', { cls: 'muted', style: 'margin-top:8px', text: w('att.allPresent') })),
+      el('div', { cls: 'card' }, rows.length ? rows : el('div', { cls: 'muted', text: '—' })), rows.length ? save : null];
+    if (asAdmin) adminShell(body); else screen(backBtn(), body);
+  };
+  S.redraw = function () { markScreen(date, asAdmin); };
+  if (asAdmin) adminShell(el('div', { cls: 'spin', text: w('app.wait') })); else busy();
+  call('markList', S.token, date || '').then(draw).catch(fail);
+}
+
+/** Team lead: their own team, for record only. */
+function teamAttScreen(date) {
+  busy();
+  call('teamMarkList', S.token, date || '').then(function (L) {
+    show(function () {
+      var marks = {};
+      L.members.forEach(function (m) { marks[m.id] = { id: m.id, status: m.status || 'P' }; });
+      var dateIn = el('input', { type: 'date', value: L.date, max: L.today });
+      dateIn.addEventListener('change', function () { if (dateIn.value) teamAttScreen(dateIn.value); });
+      var rows = L.members.map(function (m) {
+        return el('div', { cls: 'person' }, el('b', { text: m.name }), m.skill ? el('div', { cls: 'muted', text: m.skill }) : null,
+          segButtons(['P', 'A', 'H'].map(function (c) { return { code: c, label: stLabel(c) }; }), m.status || 'P', function (c) { marks[m.id].status = c; }));
+      });
+      var save = el('button', { cls: 'main sticky', text: w('app.save') });
+      save.addEventListener('click', function () {
+        save.disabled = true;
+        call('saveTeamMarks', S.token, L.date, Object.keys(marks).map(function (k) { return marks[k]; }))
+          .then(function () { toast(w('att.saved')); home(); }).catch(function (e) { save.disabled = false; fail(e); });
+      });
+      screen(backBtn(), el('h2', { text: w('att.markTeam') }),
+        el('div', { cls: 'card' }, el('label', { text: w('att.date') }), dateIn, el('div', { cls: 'muted', style: 'margin-top:8px', text: w('att.teamNote') })),
+        el('div', { cls: 'card' }, rows.length ? rows : el('div', { cls: 'muted', text: w('team.none') })), rows.length ? save : null);
+    });
+  }).catch(fail);
+}
+
 /* ------------------------------------------------------------ join */
 function joinForm(code, adminToken) {
   var F = { Type: 'Employee', 'Emergency mobile': '1', Language: S.lang };
@@ -653,7 +838,7 @@ function adminHome() {
 
 function adminShell(content) {
   var tabs = el('div', { cls: 'tabs' });
-  [['queue', 'Review'], ['people', 'People'], ['add', 'Add person'], ['link', 'Joining link']].forEach(function (t) {
+  [['queue', 'Review'], ['att', 'Attendance'], ['people', 'People'], ['add', 'Add person'], ['link', 'Joining link']].forEach(function (t) {
     tabs.appendChild(el('button', { cls: ADMIN.tab === t[0] ? 'sel' : '', text: t[1], on: { click: function () { adminTab(t[0]); } } }));
   });
   screen(el('div', { cls: 'muted' }, 'Admin: ' + ADMIN.me.name + ' · ',
@@ -675,6 +860,7 @@ function adminTab(t) {
     }).catch(fail);
   }
   if (t === 'people') return adminPeopleView();
+  if (t === 'att') return markScreen('', true);
   return adminQueueView();
 }
 
@@ -709,6 +895,19 @@ function requestCard(r) {
   } else {
     what = el('div', {}, el('b', { text: r.about }), r.field ? el('span', { cls: 'muted', text: ' · ' + r.field }) : null);
   }
+  var fix = null;
+  if (r.att) {
+    var pick = { status: r.att.status || 'P', ot: r.att.ot || '' };
+    fix = el('div', { cls: 'card', style: 'background:#faf9f6;margin:8px 0' },
+      el('div', { cls: 'muted', text: 'Now on ' + r.att.date + ': ' + (r.att.status ? stLabel(r.att.status) : 'not marked') +
+        (r.att.inTime ? ' · in ' + r.att.inTime : '') + (r.att.outTime ? ' · out ' + r.att.outTime : '') }),
+      segButtons(['P', 'A', 'H', 'L'].map(function (c) { return { code: c, label: stLabel(c) }; }), pick.status, function (c) { pick.status = c; }),
+      segButtons([{ code: '', label: 'No OT' }, { code: '0.5', label: '+½ day' }, { code: '1', label: '+1 day' }], pick.ot, function (c) { pick.ot = c; }, 'ot'),
+      el('button', { cls: 'ok', style: 'width:100%;margin-top:8px', text: 'Set this day and approve', on: { click: function () {
+        call('adminSetAttendance', S.token, r.personId, r.att.date, pick.status, pick.ot, r.id, reply.value)
+          .then(function () { toast('Fixed and approved'); adminQueueView(); }).catch(fail);
+      } } }));
+  }
   var decide = function (ok) {
     return function () {
       call('adminDecide', S.token, r.id, ok, reply.value).then(function () { toast(ok ? 'Approved' : 'Rejected'); adminQueueView(); }).catch(fail);
@@ -717,7 +916,7 @@ function requestCard(r) {
   return el('div', { cls: 'card' },
     el('div', { cls: 'muted' }, r.date + ' · ' + r.id + ' · ',
       el('button', { cls: 'link', text: r.person + ' (' + r.personId + ')', on: { click: function () { adminPersonView(r.personId, false); } } })),
-    what, r.note ? el('div', { cls: 'card', style: 'background:#faf9f6;margin:8px 0', text: '“' + r.note + '”' }) : null,
+    what, r.note ? el('div', { cls: 'card', style: 'background:#faf9f6;margin:8px 0', text: '“' + r.note + '”' }) : null, fix,
     reply,
     el('div', { cls: 'row', style: 'margin-top:8px' }, el('button', { cls: 'ok', text: 'Approve', on: { click: decide(true) } }),
       el('button', { cls: 'bad', text: 'Reject', on: { click: decide(false) } })));
