@@ -95,6 +95,13 @@
   .person { padding: 12px 0; border-bottom: 1px solid var(--line); }
   .person:last-child { border-bottom: 0; }
   .sticky { position: sticky; bottom: 8px; }
+  .big { font-size: 30px; font-weight: 700; }
+  .slip td { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .slip td:last-child { text-align: right; }
+  .slip tr.tot td { font-weight: 700; border-top: 2px solid var(--ink); }
+  .slip { width: 100%; border-collapse: collapse; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 15px; }
+  .grid2 span:nth-child(even) { text-align: right; }
 </style>
 </head>
 <body>
@@ -395,7 +402,7 @@ function homeView() {
       lead ? tile('🗓️', w('att.markTeam'), function () { teamAttScreen(); }) : null,
       S.data.isSupervisor && !lead ? tile('📝', w('home.mark'), function () { markScreen(); }) : null,
       tile('🪪', w('home.details'), detailsScreen),
-      tile('💰', w('home.money'), soon, true, w('home.soon')),
+      tile('💰', w('home.money'), function () { moneyScreen(); }),
       tile('⚠️', w('home.problem'), problemScreen),
       tile('📨', w('home.requests'), requestsScreen, false, open ? open + ' ' + w('status.Open') : ''),
       tile('🔑', w('app.changePin'), function () { changePinScreen(false); })),
@@ -700,6 +707,191 @@ function teamAttScreen(date) {
   }).catch(fail);
 }
 
+
+/* ----------------------------------------------------------- money */
+function inr(n) { return '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN'); }
+
+function moneyScreen() {
+  busy();
+  call('myMoney', S.token).then(function (m) {
+    show(function () {
+      if (m.lead) {
+        var L = m.ledger;
+        var items = L.entries.map(function (e) {
+          return el('div', { cls: 'card' },
+            el('div', { cls: 'kv', style: 'border:0;padding:0' }, el('b', { text: e.date }),
+              e.paid ? el('span', { cls: 'pill Approved', text: w('money.paid') + ' ' + inr(e.paid) })
+                : el('span', { cls: 'pill Open', text: w('money.received') + ' ' + inr(e.received) })),
+            e.whatFor ? el('div', {}, el('span', { cls: 'muted', text: w('money.whatFor') + ': ' }), e.whatFor) : null,
+            e.workDone ? el('div', {}, el('span', { cls: 'muted', text: w('money.workDone') + ': ' }), e.workDone) : null,
+            e.workPending ? el('div', {}, el('span', { cls: 'muted', text: w('money.workPending') + ': ' }), e.workPending) : null,
+            el('div', { cls: 'muted', text: '= ' + inr(e.balance) }));
+        });
+        return screen(backBtn(), el('h2', { text: w('home.money') }),
+          el('div', { cls: 'card' }, el('div', { cls: 'muted', text: w('money.balance') }), el('div', { cls: 'big', text: inr(L.balance) })),
+          items.length ? items : el('div', { cls: 'card muted', text: w('money.none') }));
+      }
+      var sf = m.soFar;
+      var month = new Date(m.month + '-01T00:00:00').toLocaleDateString(S.lang === 'hi' ? 'hi-IN' : 'en-IN', { month: 'long', year: 'numeric' });
+      screen(backBtn(), el('h2', { text: w('home.money') }),
+        el('div', { cls: 'card' }, el('div', { cls: 'muted', text: w('money.soFar') + ' · ' + month }),
+          sf.hasSetup ? [el('div', { cls: 'big', text: inr(sf.gross) }),
+            el('div', {}, w('money.days') + ': ' + sf.payableDays + (sf.otDays ? ' · ' + w('att.ot') + ': ' + sf.otDays : '')),
+            el('div', { cls: 'muted', text: w('money.estimateNote') })] : el('div', { text: w('money.noSetup') })),
+        el('div', { cls: 'card' }, el('div', { cls: 'muted', text: w('money.advance') }), el('div', { cls: 'big', text: inr(m.advanceOwed) })),
+        el('h3', { text: w('money.extras') }),
+        el('div', { cls: 'card' }, m.extras.length ? m.extras.map(function (e) {
+          return el('div', { cls: 'kv' }, el('div', {}, el('b', { text: w('type.' + e.type) }), el('div', { cls: 'muted', text: e.date + (e.note ? ' · ' + e.note : '') })),
+            el('div', { text: (e.type === 'Advance' || e.type === 'Other deduction' ? '' : '+') + inr(e.amount) }));
+        }) : el('div', { cls: 'muted', text: w('money.none') })),
+        el('h3', { text: w('money.payslips') }),
+        el('div', { cls: 'card' }, m.payslips.length ? m.payslips.map(function (p) {
+          return el('div', { cls: 'kv', on: { click: function () { payslipScreen(p.month); } }, style: 'cursor:pointer' },
+            el('div', {}, el('b', { text: p.month }), el('div', { cls: 'muted', text: p.paidOn ? w('money.paidOn') + ' ' + p.paidOn : w('money.notPaid') })),
+            el('div', {}, inr(p.net), ' ›'));
+        }) : el('div', { cls: 'muted', text: w('money.none') })));
+    });
+  }).catch(fail);
+}
+
+function slipTable(d) {
+  var s = d.s;
+  var r = function (k, v, cls) { return el('tr', { cls: cls || '' }, el('td', { text: k }), el('td', { text: v })); };
+  return el('table', { cls: 'slip' },
+    r(fieldName('Full name'), d.name + ' (' + d.id + ')'), d.designation ? r(fieldName('Designation'), d.designation) : null,
+    d.bank ? r(fieldName('Bank account'), d.bank) : null,
+    r(stLabel('P'), s['Present']), s['Half days'] ? r(stLabel('H'), s['Half days']) : null, s['Leave'] ? r(stLabel('L'), s['Leave']) : null,
+    s['Absent'] ? r(stLabel('A'), s['Absent']) : null, r(w('slip.payable'), s['Payable days']), s['OT days'] ? r(w('att.ot'), s['OT days']) : null,
+    r(w('slip.basic'), inr(s['Basic pay'])), s['OT pay'] ? r(w('slip.ot'), inr(s['OT pay'])) : null,
+    s['Incentive'] ? r(w('slip.incentive'), inr(s['Incentive'])) : null, r(w('slip.gross'), inr(s['Gross']), 'tot'),
+    s['PF'] ? r('PF', '− ' + inr(s['PF'])) : null, s['ESI'] ? r('ESI', '− ' + inr(s['ESI'])) : null,
+    s['Other deduction'] ? r(w('slip.other'), '− ' + inr(s['Other deduction'])) : null,
+    s['Advance recovered'] ? r(w('slip.advance'), '− ' + inr(s['Advance recovered'])) : null,
+    r(w('slip.net'), inr(s['Net pay']), 'tot'), s['Advance left'] ? r(w('slip.advLeft'), inr(s['Advance left'])) : null,
+    s['Paid on'] ? r(w('money.paidOn'), s['Paid on'] + ' · ' + s['Mode']) : null);
+}
+
+function payslipScreen(month, personId, back) {
+  busy();
+  call('getPayslip', S.token, month, personId || '').then(function (d) {
+    var body = [back ? backBtn(back) : backBtn(moneyScreen), el('h2', { text: w('slip.title') + ' · ' + d.month }),
+      el('div', { cls: 'card' }, el('b', { text: d.org }), slipTable(d))];
+    if (S.kind === 'a') adminShell(body); else show(function () { screen(body); });
+  }).catch(fail);
+}
+
+/* ---------------------------------------------------- admin: salary */
+function thisMonth() { var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); }
+
+function adminSalaryView(month, data) {
+  month = month || thisMonth(); ADMIN.month = month;
+  S.redraw = function () { adminSalaryView(month); };
+  if (!data) {
+    adminShell(el('div', { cls: 'spin', text: w('app.wait') }));
+    return call('adminSalary', S.token, month).then(function (d) { adminSalaryView(month, d); }).catch(fail);
+  }
+  var d = data;
+  var mIn = el('input', { type: 'month', value: month });
+  mIn.addEventListener('change', function () { if (mIn.value) adminSalaryView(mIn.value); });
+  var act = function (fn, label, confirmText) {
+    return el('button', { text: label, on: { click: function (ev) {
+      if (confirmText && !confirm(confirmText)) return;
+      ev.target.disabled = true;
+      call(fn, S.token, month).then(function (r) { toast('Done'); adminSalaryView(month, r); }).catch(function (e) { ev.target.disabled = false; fail(e); });
+    } } });
+  };
+  var payDate = el('input', { type: 'date', value: new Date().toISOString().slice(0, 10) });
+  var mode = el('select', {}, ['Bank', 'Cash', 'UPI'].map(function (m) { return el('option', { value: m, text: m }); }));
+  var paidBtn = el('button', { cls: 'ok', text: 'Mark all paid', on: { click: function () {
+    call('adminMarkPaid', S.token, month, payDate.value, mode.value, '').then(function (r) { toast('Marked paid'); adminSalaryView(month, r); }).catch(fail);
+  } } });
+  var cards = d.rows.map(function (r) {
+    return el('div', { cls: 'card' },
+      el('div', { cls: 'kv', style: 'border:0;padding:0' }, el('b', { text: r['Name'] + ' · ' + r['Person ID'] }),
+        el('span', { cls: 'pill ' + (r['Paid on'] ? 'Approved' : r['Locked'] === 'yes' ? 'Active' : 'Open'),
+          text: r['Paid on'] ? 'Paid ' + r['Paid on'] : r['Locked'] === 'yes' ? 'Locked' : 'Draft' })),
+      el('div', { cls: 'grid2' },
+        el('span', { text: r['Pay type'] + ' ' + inr(r['Rate']) }), el('span', { text: 'Days ' + r['Payable days'] + (r['OT days'] ? ' + OT ' + r['OT days'] : '') }),
+        el('span', { text: 'Gross' }), el('span', { text: inr(r['Gross']) }),
+        r['PF'] || r['ESI'] ? el('span', { text: 'PF / ESI' }) : null, r['PF'] || r['ESI'] ? el('span', { text: inr(r['PF']) + ' / ' + inr(r['ESI']) }) : null,
+        r['Advance recovered'] ? el('span', { text: 'Advance cut' }) : null, r['Advance recovered'] ? el('span', { text: inr(r['Advance recovered']) + ' (left ' + inr(r['Advance left']) + ')' }) : null,
+        r['Other deduction'] ? el('span', { text: 'Other deduction' }) : null, r['Other deduction'] ? el('span', { text: inr(r['Other deduction']) }) : null,
+        el('b', { text: 'Net' }), el('b', { text: inr(r['Net pay']), style: 'text-align:right' })),
+      r['Warnings'] ? el('div', { cls: 'err', text: '⚠ ' + r['Warnings'] }) : null,
+      r['Locked'] === 'yes' ? el('div', { cls: 'row', style: 'margin-top:8px' },
+        el('button', { text: 'View payslip', on: { click: function () { payslipScreen(month, r['Person ID'], function () { adminSalaryView(month); }); } } }),
+        r['Payslip'] ? el('a', { href: r['Payslip'], target: '_blank' }, el('button', { type: 'button', text: 'PDF' })) : null) : null);
+  });
+  var t = d.totals;
+  adminShell([el('h2', { text: 'Salary' }),
+    el('div', { cls: 'card' }, el('label', { text: 'Month' }), mIn,
+      el('div', { cls: 'muted', style: 'margin-top:8px', text: d.rows.length ? (d.locked ? 'Locked. Payslips are ready.' :
+        'Draft. Check each person; you can change Rate, Payable days, OT days, Incentive, Other deduction or Advance recovered on the Salary tab, then Recalculate.') :
+        'Not run yet. Pay comes from Pay setup, Attendance, and Advances & incentives.' }),
+      el('div', { cls: 'row', style: 'margin-top:10px;flex-wrap:wrap' },
+        d.locked ? null : act('adminRunSalary', d.rows.length ? 'Run again' : 'Run salary'),
+        d.rows.length && !d.locked ? act('adminRecalcSalary', 'Recalculate') : null,
+        d.rows.length && !d.locked ? act('adminLockSalary', 'Lock + payslips', 'Lock ' + month + '? Locked rows cannot change; the advance cuts become final.') : null)),
+    d.rows.length ? el('div', { cls: 'card' }, el('div', { cls: 'grid2' },
+      el('span', { text: 'People' }), el('span', { text: d.rows.length }), el('span', { text: 'Gross' }), el('span', { text: inr(t.gross) }),
+      el('span', { text: 'PF / ESI' }), el('span', { text: inr(t.pf) + ' / ' + inr(t.esi) }), el('span', { text: 'Advance cut' }), el('span', { text: inr(t.adv) }),
+      el('b', { text: 'Net to pay' }), el('b', { text: inr(t.net), style: 'text-align:right' }))) : null,
+    d.rows.some(function (r) { return r['Locked'] === 'yes' && !r['Paid on']; }) ? el('div', { cls: 'card' }, el('b', { text: 'Record payment' }), el('label', { text: 'Paid on' }), payDate,
+      el('label', { text: 'How' }), mode, el('div', { style: 'margin-top:8px' }, paidBtn)) : null,
+    cards]);
+}
+
+/* ----------------------------------------------------- admin: money */
+function adminMoneyView() {
+  S.redraw = adminMoneyView;
+  adminShell(el('div', { cls: 'spin', text: w('app.wait') }));
+  call('adminMoneyLists', S.token).then(function (L) {
+    var today = new Date().toISOString().slice(0, 10);
+    // Employee entry
+    var who = el('select', {}, el('option', { value: '', text: 'Choose employee' }),
+      L.employees.map(function (e) { return el('option', { value: e.id, text: e.name + ' (' + e.id + ')' + (e.advance ? ' · owes ' + inr(e.advance) : '') }); }));
+    var type = 'Advance';
+    var recWrap = el('div', {});
+    var rec = el('input', { type: 'tel', inputMode: 'numeric', placeholder: 'e.g. 1000' });
+    recWrap.appendChild(el('label', { text: 'Cut from salary each month (₹)' })); recWrap.appendChild(rec);
+    var typeSeg = segButtons(['Advance', 'Incentive', 'Bonus', 'Other deduction'].map(function (c) { return { code: c, label: c === 'Other deduction' ? 'Deduction' : c }; }),
+      type, function (c) { type = c; recWrap.style.display = c === 'Advance' ? '' : 'none'; }, 'ot');
+    var amt = el('input', { type: 'tel', inputMode: 'numeric' });
+    var date = el('input', { type: 'date', value: today, max: today });
+    var note = textBox('');
+    var save = el('button', { cls: 'main', text: 'Save', on: { click: function () {
+      if (!who.value) return toast('Choose the employee');
+      call('adminAddMoney', S.token, { personId: who.value, type: type, amount: amt.value, recovery: rec.value, date: date.value, note: note.value })
+        .then(function () { toast('Saved'); adminMoneyView(); }).catch(fail);
+    } } });
+    // Team lead entry
+    var lead = el('select', {}, el('option', { value: '', text: 'Choose team lead' }),
+      L.leads.map(function (e) { return el('option', { value: e.id, text: e.name + ' · balance ' + inr(e.balance) }); }));
+    var dir = 'paid';
+    var dirSeg = segButtons([{ code: 'paid', label: 'We paid them' }, { code: 'received', label: 'We received' }], dir, function (c) { dir = c; }, 'ot');
+    dirSeg.style.gridTemplateColumns = '1fr 1fr';
+    var lamt = el('input', { type: 'tel', inputMode: 'numeric' });
+    var ldate = el('input', { type: 'date', value: today, max: today });
+    var forWhat = textBox(''), done = textBox('', true), pending = textBox('', true);
+    var lsave = el('button', { cls: 'main', text: 'Save', on: { click: function () {
+      if (!lead.value) return toast('Choose the team lead');
+      call('adminAddLedger', S.token, { leadId: lead.value, direction: dir, amount: lamt.value, date: ldate.value,
+        whatFor: forWhat.value, workDone: done.value, workPending: pending.value }).then(function () { toast('Saved'); adminMoneyView(); }).catch(fail);
+    } } });
+    adminShell([
+      el('h2', { text: 'Advance, incentive or deduction' }),
+      el('div', { cls: 'card' }, who, typeSeg, recWrap, el('label', { text: 'Amount (₹)' }), amt, el('label', { text: 'Date' }), date,
+        el('label', { text: 'Note' }), withMic(note), save),
+      el('h2', { text: 'Team lead payment (contractor)' }),
+      el('div', { cls: 'card' }, lead, dirSeg, el('label', { text: 'Amount (₹)' }), lamt, el('label', { text: 'Date' }), ldate,
+        el('label', { text: 'What for' }), withMic(forWhat), el('label', { text: 'Work done' }), withMic(done),
+        el('label', { text: 'Work pending' }), withMic(pending), lsave),
+      L.recent.length ? el('div', { cls: 'card' }, el('b', { text: 'Recent employee entries' }), L.recent.map(function (r) {
+        return el('div', { cls: 'kv' }, el('div', { text: r.date + ' · ' + r.name }), el('div', { text: r.type + ' ' + inr(r.amount) }));
+      })) : null]);
+  }).catch(fail);
+}
+
 /* ------------------------------------------------------------ join */
 function joinForm(code, adminToken) {
   var F = { Type: 'Employee', 'Emergency mobile': '1', Language: S.lang };
@@ -838,7 +1030,7 @@ function adminHome() {
 
 function adminShell(content) {
   var tabs = el('div', { cls: 'tabs' });
-  [['queue', 'Review'], ['att', 'Attendance'], ['people', 'People'], ['add', 'Add person'], ['link', 'Joining link']].forEach(function (t) {
+  [['queue', 'Review'], ['att', 'Attendance'], ['salary', 'Salary'], ['money', 'Money'], ['people', 'People'], ['add', 'Add person'], ['link', 'Joining link']].forEach(function (t) {
     tabs.appendChild(el('button', { cls: ADMIN.tab === t[0] ? 'sel' : '', text: t[1], on: { click: function () { adminTab(t[0]); } } }));
   });
   screen(el('div', { cls: 'muted' }, 'Admin: ' + ADMIN.me.name + ' · ',
@@ -861,6 +1053,8 @@ function adminTab(t) {
   }
   if (t === 'people') return adminPeopleView();
   if (t === 'att') return markScreen('', true);
+  if (t === 'salary') return adminSalaryView(ADMIN.month);
+  if (t === 'money') return adminMoneyView();
   return adminQueueView();
 }
 

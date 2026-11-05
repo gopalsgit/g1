@@ -14,7 +14,11 @@ var TABS = {
   ATT: 'Attendance',
   TEAM_ATT: 'Team attendance',
   HOLIDAYS: 'Holidays',
-  MONTH: 'Attendance month'
+  MONTH: 'Attendance month',
+  PAY: 'Pay setup',
+  MONEY: 'Advances & incentives',
+  SALARY: 'Salary',
+  LEDGER: 'Team lead ledger'
 };
 
 var SCHEMA = {};
@@ -43,6 +47,18 @@ SCHEMA[TABS.ATT] = [
 ];
 SCHEMA[TABS.TEAM_ATT] = ['Date', 'Team lead ID', 'Team lead', 'Member ID', 'Member name', 'Status', 'Marked at', 'Key'];
 SCHEMA[TABS.HOLIDAYS] = ['Date', 'Holiday'];
+SCHEMA[TABS.PAY] = ['Person ID', 'Name', 'Pay type', 'Monthly salary', 'Daily rate', 'PF', 'UAN', 'ESI', 'ESI number', 'Effective from', 'Notes'];
+SCHEMA[TABS.MONEY] = ['Entry ID', 'Date', 'Person ID', 'Name', 'Type', 'Amount', 'Monthly recovery', 'Note', 'Entered by', 'Entered at'];
+SCHEMA[TABS.SALARY] = [
+  'Month', 'Person ID', 'Name', 'Pay type', 'Rate', 'Days in month', 'Present', 'Half days', 'Leave', 'Absent',
+  'Sundays & holidays', 'Not marked', 'Payable days', 'OT days', 'Basic pay', 'OT pay', 'Incentive', 'Gross',
+  'PF applies', 'PF', 'ESI applies', 'ESI', 'Other deduction', 'Advance before', 'Advance recovered', 'Net pay',
+  'Advance left', 'Warnings', 'Locked', 'Paid on', 'Mode', 'Payslip', 'Run by', 'Run at', 'Key'
+];
+SCHEMA[TABS.LEDGER] = [
+  'Entry ID', 'Date', 'Team lead ID', 'Team lead', 'Paid to them', 'Received from them', 'What for', 'Work done',
+  'Work pending', 'Entered by', 'Entered at'
+];
 
 var PERSON_TYPES = ['Employee', 'Team lead'];
 var PERSON_STATUS = ['Pending review', 'Active', 'Left', 'Rejected'];
@@ -60,14 +76,20 @@ var TEXT_COLS = {
   'Team members': ['Mobile'],
   'Admins': ['PIN hash'],
   'Attendance': ['In time', 'Out time', 'Key', 'Person ID'],
-  'Team attendance': ['Key']
+  'Team attendance': ['Key'],
+  'Pay setup': ['UAN', 'ESI number'],
+  'Salary': ['Month', 'Key']
 };
 var DATE_COLS = {
   'People': ['DOB', 'Joining date', 'Exit date', 'Consent date'],
   'Requests': ['Date', 'Closed on'],
   'Attendance': ['Date'],
   'Team attendance': ['Date'],
-  'Holidays': ['Date']
+  'Holidays': ['Date'],
+  'Pay setup': ['Effective from'],
+  'Advances & incentives': ['Date'],
+  'Salary': ['Paid on'],
+  'Team lead ledger': ['Date']
 };
 
 function onOpen() {
@@ -190,6 +212,17 @@ function applyValidations_(ss) {
   var ta = ss.getSheetByName(TABS.TEAM_ATT);
   var tst = colRange_(ta, 'Status'); if (tst) tst.setDataValidation(listRule_(TEAM_ATT_STATUS));
   colour(ta, 'Status', ATT_COLOURS);
+
+  var ps = ss.getSheetByName(TABS.PAY);
+  [['Pay type', PAY_TYPES], ['PF', ['yes', 'no']], ['ESI', ['yes', 'no']]].forEach(function (x) {
+    var rg = colRange_(ps, x[0]); if (rg) rg.setDataValidation(listRule_(x[1]));
+  });
+  var mn = ss.getSheetByName(TABS.MONEY);
+  var mt = colRange_(mn, 'Type'); if (mt) mt.setDataValidation(listRule_(MONEY_TYPES));
+  var sl = ss.getSheetByName(TABS.SALARY);
+  [['Pay type', PAY_TYPES], ['PF applies', ['yes', 'no']], ['ESI applies', ['yes', 'no']], ['Locked', ['yes', 'no']], ['Mode', PAY_MODES]]
+    .forEach(function (x) { var rg = colRange_(sl, x[0]); if (rg) rg.setDataValidation(listRule_(x[1])); });
+  colour(sl, 'Locked', { 'yes': '#e5f4e4', 'no': '#f9eeda' });
 }
 
 var ATT_COLOURS = { 'P': '#e5f4e4', 'A': '#fbebeb', 'H': '#f9eeda', 'L': '#e7f1fb', 'WO': '#f0efec', 'HOL': '#efedff' };

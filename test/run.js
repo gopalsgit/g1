@@ -338,6 +338,111 @@ t('main and sign-in links are told apart', () => {
   assert.ok(!G.sameLink_('', ''));
 });
 
+
+let monthlyId, dailyId;
+t('salary: monthly and daily pay, OT, PF/ESI, incentive, deduction, advance', () => {
+  const mk = (name, mobile) => {
+    const r = G.submitJoin('', adminToken, { Type: 'Employee', 'Full name': name, 'Mobile 1': mobile, 'Emergency mobile': '1',
+      'Emergency contact name': 'X', Address: 'Y', Aadhaar: AADHAAR, 'Joining date': '2026-09-01', consent: true, pin: '1212' }, {});
+    G.adminDecideJoiner(adminToken, r.id, true, '');
+    return r.id;
+  };
+  monthlyId = mk('Meena Monthly', '9000000011');
+  dailyId = mk('Dinesh Daily', '9000000012');
+  G.appendRow_('Pay setup', { 'Person ID': monthlyId, 'Pay type': 'Monthly', 'Monthly salary': 31000, PF: 'yes', ESI: 'yes', UAN: '100200300400', 'Effective from': G.parseDate_('2026-09-01') });
+  G.appendRow_('Pay setup', { 'Person ID': monthlyId, 'Pay type': 'Monthly', 'Monthly salary': 99999, 'Effective from': G.parseDate_('2026-12-01') }); // later raise, ignored for Oct
+  G.appendRow_('Pay setup', { 'Person ID': dailyId, 'Pay type': 'Daily', 'Daily rate': 700, PF: 'no', ESI: 'yes', 'Effective from': G.parseDate_('2026-09-01') });
+  G.appendRow_('Holidays', { Date: G.parseDate_('2026-10-02'), Holiday: 'Gandhi Jayanti' });
+  for (let d = 1; d <= 31; d++) {
+    const ds = '2026-10-' + String(d).padStart(2, '0');
+    const sun = new Date(2026, 9, d).getDay() === 0;
+    const marks = [];
+    if (!sun && ds !== '2026-10-02') {
+      let st = 'P', ot = '';
+      if (ds === '2026-10-05' || ds === '2026-10-06') st = 'A';
+      if (ds === '2026-10-07') st = 'H';
+      if (ds === '2026-10-08') st = 'L';
+      if (ds === '2026-10-09') ot = '1';
+      if (ds === '2026-10-10') ot = '0.5';
+      marks.push({ id: monthlyId, status: st, ot }, { id: dailyId, status: 'P' });
+    }
+    if (ds === '2026-10-04') marks.push({ id: dailyId, status: 'P' }); // worked a Sunday
+    if (marks.length) G.saveMarks(adminToken, ds, marks);
+  }
+  throwsCode(() => G.adminAddMoney(adminToken, { personId: monthlyId, type: 'Advance', amount: 1000, recovery: 2000 }), 'E_FIELD:recovery');
+  throwsCode(() => G.adminAddMoney(adminToken, { personId: monthlyId, type: 'Bonus', amount: 0 }), 'E_FIELD:amount');
+  throwsCode(() => G.adminAddMoney(adminToken, { personId: leadId, type: 'Bonus', amount: 10 }), 'E_GENERIC');
+  G.adminAddMoney(adminToken, { personId: monthlyId, type: 'Advance', amount: 10000, recovery: 3000, date: '2026-09-20' });
+  G.adminAddMoney(adminToken, { personId: monthlyId, type: 'Incentive', amount: 2000, date: '2026-10-15', note: 'Big order' });
+  G.adminAddMoney(adminToken, { personId: monthlyId, type: 'Other deduction', amount: 500, date: '2026-10-20', note: 'Damaged cloth' });
+
+  const res = G.adminRunSalary(adminToken, '2026-10');
+  assert.strictEqual(res.rows.length, 2, 'only employees employed in October');
+  const m = res.rows.find(r => r['Person ID'] === monthlyId);
+  assert.strictEqual(m['Payable days'], 27.5);   // 22 P + ½ + 4 Sundays + 1 holiday
+  assert.strictEqual(m['Basic pay'], 27500);     // 31000 / 31 × 27.5
+  assert.strictEqual(m['OT days'], 1.5);
+  assert.strictEqual(m['OT pay'], 1500);
+  assert.strictEqual(m['Gross'], 31000);
+  assert.strictEqual(m['PF'], 1800);             // 12% of 15000 cap
+  assert.strictEqual(m['ESI'], 0);               // gross above 21000
+  assert.strictEqual(m['Advance recovered'], 3000);
+  assert.strictEqual(m['Net pay'], 25700);
+  assert.strictEqual(m['Advance left'], 7000);
+  assert.strictEqual(m['Warnings'], '');
+  const dly = res.rows.find(r => r['Person ID'] === dailyId);
+  assert.strictEqual(dly['Payable days'], 27);   // 26 working days + 1 Sunday worked
+  assert.strictEqual(dly['Gross'], 18900);
+  assert.strictEqual(dly['ESI'], 142);           // 0.75% of 18900, rounded up
+  assert.strictEqual(dly['Net pay'], 18758);
+});
+
+t('salary: sheet edits are recalculated, lock makes payslips, run again leaves locked rows', () => {
+  const row = G.findBy_('Salary', 'Key', monthlyId + '|2026-10');
+  G.updateRow_('Salary', row._row, { 'Advance recovered': 5000 });
+  let res = G.adminRecalcSalary(adminToken, '2026-10');
+  let m = res.rows.find(r => r['Person ID'] === monthlyId);
+  assert.strictEqual(m['Net pay'], 23700);
+  assert.strictEqual(m['Advance left'], 5000);
+  res = G.adminLockSalary(adminToken, '2026-10');
+  assert.ok(res.locked);
+  m = res.rows.find(r => r['Person ID'] === monthlyId);
+  assert.ok(m['Payslip'].startsWith('https://drive'));
+  G.saveMarks(adminToken, '2026-10-12', [{ id: monthlyId, status: 'A' }]);
+  res = G.adminRunSalary(adminToken, '2026-10');
+  assert.strictEqual(res.rows.find(r => r['Person ID'] === monthlyId)['Net pay'], 23700, 'locked rows never change');
+  res = G.adminMarkPaid(adminToken, '2026-10', '2026-11-01', 'Bank', '');
+  assert.ok(res.rows.every(r => r['Paid on'] === '2026-11-01'));
+  throwsCode(() => G.adminMarkPaid(adminToken, '2026-10', '2026-11-01', 'Cheque', ''), 'E_GENERIC');
+  const nov = G.computeSalary_(G.findBy_('People', 'ID', monthlyId), '2026-11', G.salaryCtx_('2026-11'));
+  assert.strictEqual(nov.inputs.advanceBefore, 5000);
+  assert.strictEqual(nov.inputs.advanceRecovered, 3000);
+});
+
+t('my money and payslip for the employee, ledger for the team lead', () => {
+  const tok = G.login('9000000011', '1212').token;
+  const mm = G.myMoney(tok);
+  assert.strictEqual(mm.lead, false);
+  assert.strictEqual(mm.advanceOwed, 5000);
+  assert.strictEqual(mm.payslips[0].month, '2026-10');
+  assert.strictEqual(mm.payslips[0].net, 23700);
+  const slip = G.getPayslip(tok, '2026-10', 'IGNORED');
+  assert.strictEqual(slip.id, monthlyId);
+  assert.strictEqual(slip.uan, '100200300400');
+  assert.ok(G.payslipHtml_(slip).includes('23,700'));
+  throwsCode(() => G.getPayslip(tok, '2026-09', ''), 'E_GENERIC');
+  assert.strictEqual(G.getPayslip(adminToken, '2026-10', dailyId).id, dailyId);
+  G.adminAddLedger(adminToken, { leadId, direction: 'paid', amount: 5000, date: '2026-10-10', whatFor: 'Shirts batch 12', workDone: '200 shirts', workPending: '50 shirts' });
+  G.adminAddLedger(adminToken, { leadId, direction: 'received', amount: 1000, date: '2026-10-20', whatFor: 'Extra cloth returned' });
+  throwsCode(() => G.adminAddLedger(adminToken, { leadId: monthlyId, direction: 'paid', amount: 5 }), 'E_GENERIC');
+  const lm = G.myMoney(leadToken);
+  assert.ok(lm.lead);
+  assert.strictEqual(lm.ledger.balance, 4000);
+  assert.strictEqual(lm.ledger.entries[1].workPending, '50 shirts');
+  const lists = G.adminMoneyLists(adminToken);
+  assert.strictEqual(lists.leads.find(l => l.id === leadId).balance, 4000);
+});
+
 t('words from the tab override defaults', () => {
   const w = G.findBy_('Settings & words', 'Key', 'word.teamLead');
   G.updateRow_('Settings & words', w._row, { 'English / value': 'Thekedar' });
