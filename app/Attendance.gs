@@ -59,7 +59,7 @@ function attIndex_(from, to) {
 function attOut_(r) {
   if (!r) return null;
   return {
-    status: String(r['Status']), ot: String(r['OT']), inTime: String(r['In time']), outTime: String(r['Out time']),
+    status: String(r['Status']), ot: String(r['OT']), inTime: timeStr_(r['In time']), outTime: timeStr_(r['Out time']),
     source: String(r['Source']), confirmed: String(r['Confirmed']).toLowerCase() === 'yes'
   };
 }
