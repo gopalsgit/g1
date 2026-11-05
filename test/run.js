@@ -443,6 +443,101 @@ t('my money and payslip for the employee, ledger for the team lead', () => {
   assert.strictEqual(lists.leads.find(l => l.id === leadId).balance, 4000);
 });
 
+t('team lead invite: member joins, lead confirms, admin approves, member checks in', () => {
+  const link = G.teamInviteLink(leadToken).link;
+  const code = link.split('?join=')[1];
+  const boot = G.getBoot(code);
+  assert.ok(boot.joinValid);
+  assert.ok(boot.joinTeam);
+  const form = {
+    Type: 'Team lead', 'Full name': 'Arif Khan', Designation: 'Stitching', 'Mobile 1': '9811122233', 'Emergency mobile': '1',
+    'Emergency contact name': 'Bano', Address: 'Bhiwandi', Aadhaar: AADHAAR, 'Bank account': '99999999', consent: true, pin: '5678'
+  };
+  const r = G.submitJoin(code, '', form, { Photo: PIXEL });
+  const wid = r.id;
+  assert.ok(wid.startsWith('W-'), wid);
+  let w = G.findBy_('People', 'ID', wid);
+  assert.strictEqual(w.Type, 'Team member');              // a lead's link can only make team members
+  assert.strictEqual(w.Status, 'Team lead review');
+  assert.strictEqual(String(w['Team lead ID']), leadId);
+  assert.strictEqual(String(w['Bank account']), '');     // no bank details for team members
+  assert.strictEqual(w.Designation, 'Stitching');
+  throwsCode(() => G.login('9811122233', '5678'), 'E_PENDING');
+  // not yet in the admin queue; it is in the lead's list
+  assert.ok(!G.adminQueue(adminToken).joiners.some(j => j.id === wid));
+  let me = G.getMe(leadToken);
+  assert.strictEqual(me.teamJoiners.find(j => j.id === wid).status, 'Team lead review');
+  const seen = G.teamJoiner(leadToken, wid);
+  assert.strictEqual(seen.Aadhaar, 'XXXX XXXX 2346');
+  throwsCode(() => G.teamDecideJoiner(leadToken, wid, false, ''), 'E_FIELD:reply');
+  G.teamDecideJoiner(leadToken, wid, true, '');
+  throwsCode(() => G.teamDecideJoiner(leadToken, wid, true, ''), 'E_ALREADY');
+  const qj = G.adminQueue(adminToken).joiners.find(j => j.id === wid);
+  assert.ok(qj && qj.team);
+  G.adminDecideJoiner(adminToken, wid, true, '');
+  const tm = G.findBy_('Team members', 'Member ID', wid);
+  assert.strictEqual(String(tm['Team lead ID']), leadId);
+  assert.strictEqual(tm.Skill, 'Stitching');
+  // member signs in, sees no money, checks in
+  const mt = G.login('9811122233', '5678').token;
+  me = G.getMe(mt);
+  assert.strictEqual(me.me.type, 'Team member');
+  assert.ok(me.leadName);
+  assert.ok(!('Bank account' in me.me));
+  throwsCode(() => G.myMoney(mt), 'E_GENERIC');
+  throwsCode(() => G.teamInviteLink(mt), 'E_GENERIC');
+  throwsCode(() => G.teamDecideJoiner(mt, wid, true, ''), 'E_GENERIC');
+  throwsCode(() => G.requestChange(mt, 'IFSC', 'SBIN0001234', ''), 'E_GENERIC');
+  const c = G.checkIn(mt, 'in', { lat: 19.3, lng: 73.06, acc: 20 });
+  assert.strictEqual(c.today.status, 'P');
+  assert.ok(c.today.inTime);
+  G.checkIn(mt, 'out', null);
+  const day = G.todayStr_();
+  const row = G.findBy_('Team attendance', 'Key', wid + '|' + day);
+  assert.strictEqual(row.Source, 'Self');
+  assert.ok(row['In location'].startsWith('19.30000'));
+  assert.ok(row['Out time']);
+  assert.ok(!G.findBy_('Attendance', 'Key', wid + '|' + day)); // never on the pay attendance tab
+  // lead sees the check-in and can correct it
+  const L = G.teamMarkList(leadToken, day);
+  const mine = L.members.find(m => m.id === wid);
+  assert.strictEqual(mine.status, 'P');
+  assert.ok(mine.inTime);
+  G.saveTeamMarks(leadToken, day, [{ id: wid, status: 'H' }]);
+  assert.strictEqual(G.findBy_('Team attendance', 'Key', wid + '|' + day).Source, 'Team lead');
+  const mm = G.myMonth(mt, day.slice(0, 7));
+  assert.strictEqual(mm.days.find(d => d.date === day).status, 'H');
+  // not counted for salary
+  assert.ok(!G.employeesInMonth_(G.monthBounds_(day.slice(0, 7))).some(p => p.ID === wid));
+  // lead removes them: they can no longer sign in
+  G.requestTeamChange(leadToken, 'remove', { id: wid }, '');
+  const req = G.adminQueue(adminToken).requests.find(q => q.team && q.team.id === wid);
+  G.adminDecide(adminToken, req.id, true, '');
+  assert.strictEqual(G.findBy_('People', 'ID', wid).Status, 'Left');
+  throwsCode(() => G.getMe(mt), 'E_SIGNIN');
+});
+
+t('team lead can turn away someone who used their link', () => {
+  const code = G.teamInviteLink(leadToken).link.split('?join=')[1];
+  const r = G.submitJoin(code, '', { 'Full name': 'Stranger', 'Mobile 1': '9811122244', 'Emergency mobile': '1',
+    'Emergency contact name': 'X', Address: 'Y', Aadhaar: AADHAAR, consent: true, pin: '1111' }, {});
+  G.teamDecideJoiner(leadToken, r.id, false, 'Not my worker');
+  const p = G.findBy_('People', 'ID', r.id);
+  assert.strictEqual(p.Status, 'Rejected');
+  assert.ok(String(p.Notes).includes('Not my worker'));
+  throwsCode(() => G.login('9811122244', '1111'), 'E_INACTIVE');
+});
+
+t('check-in times stay as text, and old rows Sheets turned into times still read as HH:mm', () => {
+  const rows = G.readTable_('Attendance').filter(r => r['In time'] !== '');
+  assert.ok(rows.length > 0);
+  rows.forEach(r => assert.ok(/^\d{2}:\d{2}$/.test(r['In time']), 'stored as text: ' + r['In time']));
+  const r = rows[0];
+  G.sheet_('Attendance').set(r._row, G.SCHEMA['Attendance'].indexOf('In time') + 1, new Date(1899, 11, 30, 15, 22));
+  const day = G.dateStrOf_(r.Date);
+  assert.strictEqual(G.attendanceOn_(r['Person ID'], day).inTime, '15:22');
+});
+
 t('words from the tab override defaults', () => {
   const w = G.findBy_('Settings & words', 'Key', 'word.teamLead');
   G.updateRow_('Settings & words', w._row, { 'English / value': 'Thekedar' });

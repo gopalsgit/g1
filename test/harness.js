@@ -32,7 +32,12 @@ class Range {
 }
 class Sheet {
   constructor(name, id) { this.name = name; this.id = id; this.data = []; this.hidden = false; this.cf = []; }
-  set(r, c, v) { while (this.data.length < r) this.data.push([]); this.data[r - 1][c - 1] = v; }
+  set(r, c, v) {
+    // Like Sheets: a leading ' keeps text as typed; a bare "15:22" becomes a time value (a Date in 1899).
+    if (typeof v === 'string' && v[0] === "'") v = v.slice(1);
+    else if (typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v)) { const [h, m] = v.split(':').map(Number); v = new Date(1899, 11, 30, h, m); }
+    while (this.data.length < r) this.data.push([]); this.data[r - 1][c - 1] = v;
+  }
   getRange(r, c, nr, nc) { return new Range(this, r, c, nr, nc); }
   getLastRow() { for (let i = this.data.length; i > 0; i--) if ((this.data[i - 1] || []).some(v => v !== '' && v !== undefined)) return i; return 0; }
   getLastColumn() { return Math.max(0, ...this.data.map(r => { for (let j = r.length; j > 0; j--) if (r[j - 1] !== '' && r[j - 1] !== undefined) return j; return 0; })); }
@@ -143,5 +148,13 @@ module.exports = { makeEnv, seed() {
   G.reportProblem(st, 'Attendance', ago(1), 'Marked half day but I was here all day');
   G.submitJoin(G.makeJoinCode_(7), '', { Type: 'Employee', 'Full name': 'Anita Devi', 'Mobile 1': '9811111111', 'Emergency mobile': '1',
     'Emergency contact name': 'Mohan', Address: 'Kalyan', Aadhaar: AADHAAR, consent: true, pin: '5555' }, {});
-  return { G, tokens: { staff: st, lead, join: G.makeJoinCode_(7), g: G.sign_({ k: 'g', e: 'gopal@gmail.com', x: Date.now() + 600000 }) } };
+  const teamJoin = G.teamInviteLink(lead).link.split('?join=')[1];
+  const tmForm = (name, mobile, skill) => ({ 'Full name': name, Designation: skill, 'Mobile 1': mobile, 'Emergency mobile': '1',
+    'Emergency contact name': 'Family', Address: 'Bhiwandi', Aadhaar: AADHAAR, consent: true, pin: '2222' });
+  const a1 = G.submitJoin(teamJoin, '', tmForm('Arif Khan', '9811122233', 'Stitching'), {});
+  G.teamDecideJoiner(lead, a1.id, true, ''); G.adminDecideJoiner(adm, a1.id, true, '');
+  const member = G.login('9811122233', '2222').token;
+  G.checkIn(member, 'in', { lat: 19.3, lng: 73.06, acc: 10 });
+  G.submitJoin(teamJoin, '', tmForm('Pappu Yadav', '9811122244', 'Ironing'), {});
+  return { G, tokens: { staff: st, lead, member, teamJoin, join: G.makeJoinCode_(7), g: G.sign_({ k: 'g', e: 'gopal@gmail.com', x: Date.now() + 600000 }) } };
 } };

@@ -56,10 +56,19 @@ function attIndex_(from, to) {
   return idx;
 }
 
+function teamAttIndex_(from, to) {
+  var idx = {};
+  readTable_(TABS.TEAM_ATT).forEach(function (r) {
+    var d = dateStrOf_(r['Date']);
+    if (d >= from && d <= to) idx[attKey_(r['Member ID'], d)] = r;
+  });
+  return idx;
+}
+
 function attOut_(r) {
   if (!r) return null;
   return {
-    status: String(r['Status']), ot: String(r['OT']), inTime: String(r['In time']), outTime: String(r['Out time']),
+    status: String(r['Status']), ot: String(r['OT']), inTime: timeStr_(r['In time']), outTime: timeStr_(r['Out time']),
     source: String(r['Source']), confirmed: String(r['Confirmed']).toLowerCase() === 'yes'
   };
 }
@@ -96,8 +105,9 @@ function cleanLoc_(loc) {
 /** kind = 'in' or 'out'. loc = {lat, lng, acc} or null. 'in' keeps the first time of the day. */
 function checkIn(token, kind, loc) {
   var p = staff_(token);
-  if (p['Type'] !== 'Employee') throw new Error('E_GENERIC');
   if (kind !== 'in' && kind !== 'out') throw new Error('E_GENERIC');
+  if (p['Type'] === 'Team member') return memberCheckIn_(p, kind, loc);
+  if (p['Type'] !== 'Employee') throw new Error('E_GENERIC');
   var day = todayStr_();
   return withLock_(function () {
     var cur = findBy_(TABS.ATT, 'Key', attKey_(p['ID'], day));
@@ -125,6 +135,41 @@ function checkIn(token, kind, loc) {
   });
 }
 
+/* --------------------------------------------- team member check-in */
+
+function teamAttOut_(r) {
+  if (!r) return null;
+  return { status: String(r['Status']), ot: '', inTime: timeStr_(r['In time']), outTime: timeStr_(r['Out time']),
+    source: String(r['Source'] || ''), confirmed: true };
+}
+
+function teamAttOn_(memberId, dateStr) { return teamAttOut_(findBy_(TABS.TEAM_ATT, 'Key', attKey_(memberId, dateStr))); }
+
+/**
+ * A team member checks in or out. It goes on Team attendance as Present (for records only,
+ * never pay); the team lead can change the status afterwards.
+ */
+function memberCheckIn_(p, kind, loc) {
+  var day = todayStr_();
+  var key = attKey_(p['ID'], day);
+  return withLock_(function () {
+    var cur = findBy_(TABS.TEAM_ATT, 'Key', key);
+    if (kind === 'in' && cur && cur['In time']) return { today: teamAttOut_(cur) };
+    var f = kind === 'in' ? { 'In time': nowTime_(), 'In location': cleanLoc_(loc) } : { 'Out time': nowTime_(), 'Out location': cleanLoc_(loc) };
+    if (!cur || !cur['Status']) { f['Status'] = 'P'; f['Source'] = 'Self'; f['Marked at'] = new Date(); }
+    if (cur) {
+      updateRow_(TABS.TEAM_ATT, cur._row, f);
+    } else {
+      var lead = findBy_(TABS.PEOPLE, 'ID', p['Team lead ID']);
+      f['Date'] = parseDate_(day); f['Team lead ID'] = p['Team lead ID']; f['Team lead'] = leadName_(lead);
+      f['Member ID'] = p['ID']; f['Member name'] = p['Display name'] || p['Full name']; f['Key'] = key;
+      appendRow_(TABS.TEAM_ATT, f);
+    }
+    audit_(p['Full name'], TABS.TEAM_ATT, key, { 'Check': ['', kind + ' ' + (f['In time'] || f['Out time'])] }, 'check-' + kind);
+    return { today: teamAttOn_(p['ID'], day) };
+  });
+}
+
 /** One month for the signed-in employee: a day list and totals. month = 'yyyy-MM'. */
 function myMonth(token, month) {
   var p = staff_(token);
@@ -136,7 +181,8 @@ function monthFor_(p, month) {
   var y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
   var days = new Date(y, m, 0).getDate();
   var from = month + '-01', to = month + '-' + ('0' + days).slice(-2);
-  var idx = attIndex_(from, to);
+  var team = p['Type'] === 'Team member';
+  var idx = team ? teamAttIndex_(from, to) : attIndex_(from, to);
   var hol = holidaysMap_();
   var today = todayStr_();
   var joined = p['Joining date'] ? dateStrOf_(p['Joining date']) : '';
@@ -144,7 +190,7 @@ function monthFor_(p, month) {
   var list = [];
   for (var d = 1; d <= days; d++) {
     var ds = month + '-' + ('0' + d).slice(-2);
-    var r = attOut_(idx[attKey_(p['ID'], ds)]);
+    var r = (team ? teamAttOut_ : attOut_)(idx[attKey_(p['ID'], ds)]);
     var item = { date: ds, day: d, weekday: parseDate_(ds).getDay(), holiday: hol[ds] || '' };
     if (r) {
       item.status = r.status; item.ot = r.ot; item.inTime = r.inTime; item.outTime = r.outTime; item.confirmed = r.confirmed;
@@ -239,10 +285,14 @@ function teamMarkList(token, dateStr) {
   checkDateStr_(dateStr);
   if (daysBetween_(dateStr, todayStr_()) < 0) throw new Error('E_DATERANGE');
   var have = {};
-  readTable_(TABS.TEAM_ATT).forEach(function (r) { if (dateStrOf_(r['Date']) === dateStr) have[String(r['Member ID'])] = String(r['Status']); });
+  readTable_(TABS.TEAM_ATT).forEach(function (r) { if (dateStrOf_(r['Date']) === dateStr) have[String(r['Member ID'])] = r; });
   return {
     date: dateStr, today: todayStr_(),
-    members: teamOf_(p['ID']).map(function (mb) { return { id: mb.id, name: mb.name, skill: mb.skill, status: have[mb.id] || '' }; })
+    members: teamOf_(p['ID']).map(function (mb) {
+      var r = have[mb.id];
+      return { id: mb.id, name: mb.name, skill: mb.skill, status: r ? String(r['Status']) : '',
+        inTime: r ? timeStr_(r['In time']) : '', outTime: r ? timeStr_(r['Out time']) : '' };
+    })
   };
 }
 
@@ -260,10 +310,11 @@ function saveTeamMarks(token, dateStr, marks) {
       if (!mb || TEAM_ATT_STATUS.indexOf(x.status) < 0) return;
       var key = attKey_(mb.id, dateStr);
       var row = findBy_(TABS.TEAM_ATT, 'Key', key);
-      if (row) updateRow_(TABS.TEAM_ATT, row._row, { 'Status': x.status, 'Marked at': new Date() });
-      else appendRow_(TABS.TEAM_ATT, {
+      if (row) {
+        if (String(row['Status']) !== x.status) updateRow_(TABS.TEAM_ATT, row._row, { 'Status': x.status, 'Marked at': new Date(), 'Source': 'Team lead' });
+      } else appendRow_(TABS.TEAM_ATT, {
         'Date': parseDate_(dateStr), 'Team lead ID': p['ID'], 'Team lead': p['Display name'] || p['Full name'],
-        'Member ID': mb.id, 'Member name': mb.name, 'Status': x.status, 'Marked at': new Date(), 'Key': key
+        'Member ID': mb.id, 'Member name': mb.name, 'Status': x.status, 'Marked at': new Date(), 'Key': key, 'Source': 'Team lead'
       });
       n++;
     });

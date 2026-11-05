@@ -145,7 +145,7 @@ function login(mobile, pin) {
 }
 
 function statusGate_(person) {
-  if (person['Status'] === 'Pending review') throw new Error('E_PENDING');
+  if (person['Status'] === 'Pending review' || person['Status'] === 'Team lead review') throw new Error('E_PENDING');
   if (person['Status'] !== 'Active') throw new Error('E_INACTIVE');
 }
 
@@ -205,16 +205,34 @@ function changePin(token, oldPin, newPin) {
 
 /* ---------------------------------------------------- joining links */
 
-function makeJoinCode_(days) {
+/**
+ * A joining link code, kept as a script property join:<code> = "<expiry ms>" or, for a team
+ * lead's invite link, "<expiry ms>|<team lead ID>".
+ */
+function makeJoinCode_(days, leadId) {
   var code = Utilities.getUuid().replace(/-/g, '').slice(0, 12);
-  PropertiesService.getScriptProperties().setProperty('join:' + code, String(Date.now() + (days || 7) * 86400000));
+  var v = String(Date.now() + (days || 7) * 86400000) + (leadId ? '|' + leadId : '');
+  PropertiesService.getScriptProperties().setProperty('join:' + code, v);
   return code;
 }
 
-function joinCodeValid_(code) {
-  if (!/^[a-f0-9]{12}$/.test(String(code || ''))) return false;
-  var exp = Number(PropertiesService.getScriptProperties().getProperty('join:' + code) || 0);
-  return exp > Date.now();
+function joinCodeParts_(code) {
+  if (!/^[a-f0-9]{12}$/.test(String(code || ''))) return null;
+  var v = String(PropertiesService.getScriptProperties().getProperty('join:' + code) || '').split('|');
+  var exp = Number(v[0] || 0);
+  if (!(exp > Date.now())) return null;
+  return { lead: v[1] || '' };
+}
+
+function joinCodeValid_(code) { return !!joinCodeParts_(code); }
+
+/** The active team lead an invite code belongs to, or null for an ordinary joining link. */
+function joinLead_(code) {
+  var j = joinCodeParts_(code);
+  if (!j || !j.lead) return null;
+  var lead = findBy_(TABS.PEOPLE, 'ID', j.lead);
+  if (!lead || lead['Type'] !== 'Team lead' || lead['Status'] !== 'Active') throw new Error('E_BADJOIN');
+  return lead;
 }
 
 /**

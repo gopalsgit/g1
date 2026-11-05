@@ -14,7 +14,9 @@ function adminQueue(token) {
   var byId = {};
   people.forEach(function (p) { byId[String(p['ID'])] = p; });
   var joiners = people.filter(function (p) { return p['Status'] === 'Pending review'; }).map(function (p) {
-    return { id: String(p['ID']), name: String(p['Full name']), type: String(p['Type']), mobile: String(p['Mobile 1']), created: fmtDate_(p['Created at']) };
+    var lead = p['Team lead ID'] ? byId[String(p['Team lead ID'])] : null;
+    return { id: String(p['ID']), name: String(p['Full name']), type: String(p['Type']), mobile: String(p['Mobile 1']),
+      created: fmtDate_(p['Created at']), team: leadName_(lead) };
   });
   var requests = readTable_(TABS.REQUESTS).filter(function (r) { return r['Status'] === 'Open'; }).map(function (r) {
     var field = String(r['Field']);
@@ -79,6 +81,11 @@ function applyRequest_(r, who) {
     } else if (t.action === 'remove') {
       var m = findBy_(TABS.TEAM, 'Member ID', t.id);
       if (m) audit_(who, TABS.TEAM, t.id, updateRow_(TABS.TEAM, m._row, { 'Active': 'no' }), 'request ' + r['Request ID']);
+      // A member who joined with the invite link also has a People row: they leave too and can no longer sign in.
+      var mp = findBy_(TABS.PEOPLE, 'ID', t.id);
+      if (mp && mp['Type'] === 'Team member' && mp['Status'] === 'Active') {
+        audit_(who, TABS.PEOPLE, t.id, updateRow_(TABS.PEOPLE, mp._row, { 'Status': 'Left', 'Exit date': new Date(), 'Updated at': new Date() }), 'request ' + r['Request ID']);
+      }
     }
   }
   // Attendance, salary, advance and other problems are fixed by hand; approving records the answer.
@@ -97,8 +104,25 @@ function adminDecideJoiner(token, personId, approve, reply) {
     if (reply) upd['Notes'] = (p['Notes'] ? p['Notes'] + '\n' : '') + (approve ? 'Approved: ' : 'Rejected: ') + reply;
     var ch = updateRow_(TABS.PEOPLE, p._row, upd);
     audit_(who, TABS.PEOPLE, personId, ch, 'app (admin)');
+    if (approve && p['Type'] === 'Team member') addToTeam_(p, who);
     return { ok: true };
   });
+}
+
+/** Puts an approved team member on the Team members tab, so their lead sees and marks them. */
+function addToTeam_(p, who) {
+  var lead = findBy_(TABS.PEOPLE, 'ID', p['Team lead ID']);
+  var row = findBy_(TABS.TEAM, 'Member ID', p['ID']);
+  var fields = {
+    'Team lead ID': p['Team lead ID'], 'Team lead': leadName_(lead), 'Member name': p['Display name'] || p['Full name'],
+    'Mobile': p['Mobile 1'], 'Skill': p['Designation'] || '', 'Active': 'yes'
+  };
+  if (row) { audit_(who, TABS.TEAM, p['ID'], updateRow_(TABS.TEAM, row._row, fields), 'joiner approved'); return; }
+  fields['Member ID'] = p['ID'];
+  fields['Notes'] = 'Joined with invite link';
+  fields['Added at'] = new Date();
+  appendRow_(TABS.TEAM, fields);
+  audit_(who, TABS.TEAM, p['ID'], { 'Active': ['', 'yes'] }, 'joiner approved');
 }
 
 function adminPeople(token, query) {
@@ -130,6 +154,7 @@ function adminPerson(token, personId) {
   var sh = sheet_(TABS.PEOPLE);
   out._sheetLink = SpreadsheetApp.getActive().getUrl() + '#gid=' + sh.getSheetId() + '&range=A' + p._row;
   if (p['Type'] === 'Team lead') out._team = teamOf_(p['ID']);
+  if (p['Team lead ID']) out._lead = leadName_(findBy_(TABS.PEOPLE, 'ID', p['Team lead ID']));
   out._requests = readTable_(TABS.REQUESTS).filter(function (r) { return String(r['Person ID']) === String(personId); })
     .map(function (r) {
       return { id: String(r['Request ID']), date: fmtDate_(r['Date']), about: String(r['About']), field: String(r['Field']), status: String(r['Status']) };

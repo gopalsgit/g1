@@ -94,6 +94,15 @@ the link picks up the change.
 - **Straight in the sheet:** add a row on People with Status `Active`, then select the row and
   `Om Team > Set PIN for selected person`. They change the PIN on first sign-in.
 
+- **Team lead invites their own team:** in *My team*, the team lead taps *Invite my team* and sends
+  the 7-day link (WhatsApp button included). Members fill the same joining form on their own phone,
+  without bank details, and become *Team member* rows on People (IDs `W-…`) with Status
+  *Team lead review*. The lead confirms "yes, in my team" (or turns them away with a reason); then it
+  reaches the admin Review queue as a normal new joiner. Approving adds them to the Team members tab.
+  Members sign in with mobile + PIN, see their details, attendance, problems and requests (no money),
+  and tap check in / check out. That marks them Present on Team attendance, with time and location,
+  for records only. The lead can still change the status. Removing a member also sets them to Left.
+
 Staff sign in with **Mobile 1 and their PIN**, or with Google if their Gmail is in *Login Gmail*
 or *Email*.
 
