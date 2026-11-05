@@ -528,6 +528,16 @@ t('team lead can turn away someone who used their link', () => {
   throwsCode(() => G.login('9811122244', '1111'), 'E_INACTIVE');
 });
 
+t('check-in times stay as text, and old rows Sheets turned into times still read as HH:mm', () => {
+  const rows = G.readTable_('Attendance').filter(r => r['In time'] !== '');
+  assert.ok(rows.length > 0);
+  rows.forEach(r => assert.ok(/^\d{2}:\d{2}$/.test(r['In time']), 'stored as text: ' + r['In time']));
+  const r = rows[0];
+  G.sheet_('Attendance').set(r._row, G.SCHEMA['Attendance'].indexOf('In time') + 1, new Date(1899, 11, 30, 15, 22));
+  const day = G.dateStrOf_(r.Date);
+  assert.strictEqual(G.attendanceOn_(r['Person ID'], day).inTime, '15:22');
+});
+
 t('words from the tab override defaults', () => {
   const w = G.findBy_('Settings & words', 'Key', 'word.teamLead');
   G.updateRow_('Settings & words', w._row, { 'English / value': 'Thekedar' });

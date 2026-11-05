@@ -68,7 +68,7 @@ function teamAttIndex_(from, to) {
 function attOut_(r) {
   if (!r) return null;
   return {
-    status: String(r['Status']), ot: String(r['OT']), inTime: String(r['In time']), outTime: String(r['Out time']),
+    status: String(r['Status']), ot: String(r['OT']), inTime: timeStr_(r['In time']), outTime: timeStr_(r['Out time']),
     source: String(r['Source']), confirmed: String(r['Confirmed']).toLowerCase() === 'yes'
   };
 }
@@ -139,7 +139,7 @@ function checkIn(token, kind, loc) {
 
 function teamAttOut_(r) {
   if (!r) return null;
-  return { status: String(r['Status']), ot: '', inTime: String(r['In time'] || ''), outTime: String(r['Out time'] || ''),
+  return { status: String(r['Status']), ot: '', inTime: timeStr_(r['In time']), outTime: timeStr_(r['Out time']),
     source: String(r['Source'] || ''), confirmed: true };
 }
 
@@ -291,7 +291,7 @@ function teamMarkList(token, dateStr) {
     members: teamOf_(p['ID']).map(function (mb) {
       var r = have[mb.id];
       return { id: mb.id, name: mb.name, skill: mb.skill, status: r ? String(r['Status']) : '',
-        inTime: r ? String(r['In time'] || '') : '', outTime: r ? String(r['Out time'] || '') : '' };
+        inTime: r ? timeStr_(r['In time']) : '', outTime: r ? timeStr_(r['Out time']) : '' };
     })
   };
 }

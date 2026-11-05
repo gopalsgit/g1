@@ -62,7 +62,15 @@ function updateRow_(name, rowNum, obj) {
 
 function cellValue_(v) {
   if (v === null || v === undefined) return '';
+  // Sheets turns "15:22" into a time value (shown as a date in 1899). The leading ' keeps it as text.
+  if (typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v)) return "'" + v;
   return v;
+}
+
+/** A time cell as HH:mm, also for older rows that Sheets already turned into a time value. */
+function timeStr_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, TZ, 'HH:mm');
+  return String(v === undefined || v === null ? '' : v).replace(/^'/, '');
 }
 
 function nextId_(name, header, prefix) {
