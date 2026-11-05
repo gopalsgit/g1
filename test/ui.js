@@ -67,6 +67,17 @@ const harness = require('./harness');
   await p.fill('input[type=month]', '2026-11'); await p.dispatchEvent('input[type=month]', 'change'); await p.waitForTimeout(500);
   await p.click('text=Run salary'); await p.waitForTimeout(800); await shot(p, '34-admin-salary-draft');
   await p.click('.tabs >> text=Money'); await p.waitForTimeout(500); await shot(p, '35-admin-money');
+  // Team members join with the team lead's link and check in themselves
+  p = await page({ appUrl: 'x' }, { 'omt.lang': 'hi', 'omt.kind': 's', 'omt.token': tokens.lead }); await p.waitForTimeout(300);
+  await shot(p, '40-lead-home-waiting'); await p.click('text=मेरी टीम'); await p.waitForTimeout(300); await shot(p, '41-team-waiting');
+  await p.click('text=जाँचें'); await p.waitForTimeout(400); await shot(p, '42-lead-checks-joiner');
+  await p.click('text=वापस'); await p.waitForTimeout(300);
+  await p.click('text=अपनी टीम को बुलाएँ'); await p.waitForTimeout(400); await shot(p, '43-invite-link');
+  p = await page({ join: tokens.teamJoin, appUrl: 'x' }, { 'omt.lang': 'hi' }); await shot(p, '44-member-join-1');
+  p = await page({ appUrl: 'x' }, { 'omt.lang': 'hi', 'omt.kind': 's', 'omt.token': tokens.member }); await p.waitForTimeout(400);
+  await shot(p, '45-member-home');
+  p = await page({ appUrl: 'x' }, { 'omt.lang': 'hi', 'omt.kind': 's', 'omt.token': tokens.lead }); await p.waitForTimeout(300);
+  await p.click('text=टीम की हाज़िरी'); await p.waitForTimeout(400); await shot(p, '46-team-att-checkin');
   await b.close();
   console.log(errors.length ? 'PAGE ERRORS:\n' + errors.join('\n') : 'no page errors');
 })();

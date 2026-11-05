@@ -248,7 +248,7 @@ function start() {
   S.lang = load('omt.lang') || 'hi';
   call('getBoot', BOOT.join || '').then(function (b) {
     S.words = b.words; S.orgName = b.orgName || S.orgName; S.signinUrl = b.signinUrl || '';
-    if (BOOT.join) { if (b.joinValid) return joinForm(BOOT.join, null); return show(function () { screen(el('div', { cls: 'card', text: w('join.badLink') })); }); }
+    if (BOOT.join) { if (b.joinValid) return joinForm(BOOT.join, null, b.joinTeam || ''); return show(function () { screen(el('div', { cls: 'card', text: w('join.badLink') })); }); }
     if (BOOT.g) return googleBack(BOOT.g);
     S.token = load('omt.token'); S.kind = load('omt.kind');
     if (S.token && S.kind === 'a') return adminHome();
@@ -348,7 +348,7 @@ function home() {
     if (d.me.Language && !load('omt.lang')) S.lang = d.me.Language;
     if (d.mustChangePin) return changePinScreen(true);
     show(homeView);
-    if (d.autoCheckIn && d.me.type === 'Employee' && !(d.today && d.today.inTime)) doCheck('in', true);
+    if (d.autoCheckIn && (d.me.type === 'Employee' || d.me.type === 'Team member') && !(d.today && d.today.inTime)) doCheck('in', true);
   }).catch(fail);
 }
 
@@ -391,18 +391,20 @@ function tile(icon, label, onClick, off, sub) {
 }
 
 function homeView() {
-  var me = S.me, lead = me.type === 'Team lead';
+  var me = S.me, lead = me.type === 'Team lead', member = me.type === 'Team member';
   var soon = function () { toast(w('home.soon')); };
   var open = (S.data.requests || []).filter(function (r) { return r.status === 'Open'; }).length;
+  var waiting = (S.data.teamJoiners || []).filter(function (j) { return j.status === 'Team lead review'; }).length;
   screen(
     el('h2', { text: w('app.hello') + ', ' + (lead ? me['Display name'] || me['Full name'] : me['Full name']) }),
+    member && S.data.leadName ? el('div', { cls: 'muted', style: 'margin:-6px 0 10px', text: w('team.yourTeam') + ': ' + S.data.leadName }) : null,
     lead ? null : checkCard(),
     el('div', { cls: 'tiles' },
-      lead ? tile('👥', w('home.team'), teamScreen) : tile('📅', w('att.mine'), function () { myAttendanceScreen(); }),
+      lead ? tile('👥', w('home.team'), teamScreen, false, waiting ? waiting + ' ' + w('team.waiting') : '') : tile('📅', w('att.mine'), function () { myAttendanceScreen(); }),
       lead ? tile('🗓️', w('att.markTeam'), function () { teamAttScreen(); }) : null,
       S.data.isSupervisor && !lead ? tile('📝', w('home.mark'), function () { markScreen(); }) : null,
       tile('🪪', w('home.details'), detailsScreen),
-      tile('💰', w('home.money'), function () { moneyScreen(); }),
+      member ? null : tile('💰', w('home.money'), function () { moneyScreen(); }),
       tile('⚠️', w('home.problem'), problemScreen),
       tile('📨', w('home.requests'), requestsScreen, false, open ? open + ' ' + w('status.Open') : ''),
       tile('🔑', w('app.changePin'), function () { changePinScreen(false); })),
@@ -416,13 +418,17 @@ var DETAIL_FIELDS = ['Full name', 'Display name', 'DOB', 'Mobile 1', 'Mobile 2',
   'Emergency contact name', 'Emergency relation', 'Email', 'Address', 'Aadhaar', 'PAN', 'Bank account', 'IFSC',
   'Account holder', 'Photo', 'Aadhaar photo', 'PAN photo'];
 var PHOTO_F = ['Photo', 'Aadhaar photo', 'PAN photo'];
+var BANK_F = ['Bank account', 'IFSC', 'Account holder'];
 
 function detailsScreen() {
   show(function () {
     var me = S.me;
     var pending = {};
     (S.data.requests || []).forEach(function (r) { if (r.status === 'Open' && r.about === 'My details') pending[r.field] = true; });
-    var rows = DETAIL_FIELDS.filter(function (f) { return f !== 'Display name' || me.type === 'Team lead'; }).map(function (f) {
+    var rows = DETAIL_FIELDS.filter(function (f) {
+      if (me.type === 'Team member' && BANK_F.indexOf(f) >= 0) return false;
+      return f !== 'Display name' || me.type === 'Team lead';
+    }).map(function (f) {
       var v = me[f];
       if (f === 'Emergency mobile' && v) v = me['Mobile ' + v] || v;
       if (PHOTO_F.indexOf(f) >= 0) v = v ? '✓' : '—';
@@ -432,7 +438,7 @@ function detailsScreen() {
         el('button', { text: w('details.change'), on: { click: function () { changeScreen(f); } } }));
     });
     var info = [];
-    if (me.Designation) info.push(el('div', { cls: 'kv' }, el('div', { cls: 'k', text: fieldName('Designation') }), el('div', { cls: 'v', text: me.Designation })));
+    if (me.Designation) info.push(el('div', { cls: 'kv' }, el('div', { cls: 'k', text: me.type === 'Team member' ? w('team.skill') : fieldName('Designation') }), el('div', { cls: 'v', text: me.Designation })));
     if (me.Department) info.push(el('div', { cls: 'kv' }, el('div', { cls: 'k', text: fieldName('Department') }), el('div', { cls: 'v', text: me.Department })));
     if (me['Joining date']) info.push(el('div', { cls: 'kv' }, el('div', { cls: 'k', text: fieldName('Joining date') }), el('div', { cls: 'v', text: me['Joining date'] })));
     screen(backBtn(), el('h2', { text: w('home.details') }),
@@ -560,11 +566,67 @@ function teamScreen() {
           call('requestTeamChange', S.token, 'remove', { id: m.id }, '').then(function () { toast(w('details.sent')); home(); }).catch(fail);
         } } }));
     });
+    var joiners = (S.data.teamJoiners || []).map(function (j) {
+      var mine = j.status === 'Team lead review';
+      return el('div', { cls: 'kv' },
+        el('div', {}, el('b', { text: j.name }), el('div', { cls: 'muted', text: [j.skill, j.mobile, j.created].filter(String).join(' · ') })),
+        mine ? el('button', { cls: 'ok', text: w('team.check'), on: { click: function () { teamJoinerScreen(j.id); } } })
+          : el('span', { cls: 'pill wait', text: w('team.withAdmin') }));
+    });
     screen(backBtn(), el('h2', { text: w('home.team') + ': ' + (S.me['Display name'] || S.me['Full name']) }),
+      joiners.length ? el('div', { cls: 'card' }, el('b', { text: w('team.waiting') }), joiners) : null,
       el('div', { cls: 'card' }, rows.length ? rows : el('div', { cls: 'muted', text: w('team.none') })),
       pendingAdds.length ? el('div', { cls: 'muted', text: pendingAdds.length + ' ' + w('details.pending') }) : null,
-      el('button', { cls: 'main', text: '+ ' + w('team.add'), on: { click: addMemberScreen } }));
+      el('button', { cls: 'main', text: '📩 ' + w('team.invite'), on: { click: inviteScreen } }),
+      el('button', { cls: 'link', text: '+ ' + w('team.add'), on: { click: addMemberScreen } }));
   });
+}
+
+function inviteScreen() {
+  busy();
+  call('teamInviteLink', S.token).then(function (r) {
+    show(function () {
+      var box = el('input', { type: 'text', value: r.link, readOnly: true });
+      var copy = el('button', { text: w('team.copy'), on: { click: function () {
+        box.select();
+        try { navigator.clipboard.writeText(r.link).then(function () { toast(w('team.copied')); }, function () { document.execCommand('copy'); toast(w('team.copied')); }); }
+        catch (e) { document.execCommand('copy'); toast(w('team.copied')); }
+      } } });
+      var wa = el('a', { href: 'https://wa.me/?text=' + encodeURIComponent(w('team.shareText') + ' ' + r.link), target: '_blank' },
+        el('button', { type: 'button', cls: 'main', text: w('team.share') }));
+      screen(backBtn(teamScreen), el('h2', { text: w('team.invite') }),
+        el('div', { cls: 'card' }, el('p', { text: w('team.inviteHelp') }), box, el('div', { cls: 'row', style: 'margin-top:8px' }, copy)), wa);
+    });
+  }).catch(fail);
+}
+
+function teamJoinerScreen(id) {
+  busy();
+  call('teamJoiner', S.token, id).then(function (p) {
+    show(function () {
+      var fields = ['Full name', 'DOB', 'Mobile 1', 'Mobile 2', 'Mobile 3', 'Emergency contact name', 'Emergency relation', 'Address', 'Aadhaar', 'PAN', 'Photo'];
+      var rows = fields.filter(function (f) { return p[f]; }).map(function (f) {
+        return el('div', { cls: 'kv' }, el('div', { cls: 'k', text: fieldName(f) }), el('div', { cls: 'v', text: f === 'Photo' ? '✓' : p[f] }));
+      });
+      if (p.Designation) rows.splice(1, 0, el('div', { cls: 'kv' }, el('div', { cls: 'k', text: w('team.skill') }), el('div', { cls: 'v', text: p.Designation })));
+      var reply = textBox('');
+      reply.placeholder = w('team.replyHelp');
+      var decide = function (ok, btn) {
+        if (!ok && !reply.value.trim()) return toast(w('team.replyHelp'));
+        btn.disabled = true;
+        call('teamDecideJoiner', S.token, id, ok, reply.value).then(function () { toast(ok ? w('team.confirmed') : w('team.turnedAway')); home(); })
+          .catch(function (e) { btn.disabled = false; fail(e); });
+      };
+      var yes = el('button', { cls: 'ok', text: '✓ ' + w('team.confirm') });
+      var no = el('button', { cls: 'bad', text: w('team.notMine') });
+      yes.addEventListener('click', function () { decide(true, yes); });
+      no.addEventListener('click', function () { decide(false, no); });
+      screen(backBtn(teamScreen), el('h2', { text: p['Full name'] }),
+        el('div', { cls: 'muted', text: w('team.checkHelp') }),
+        el('div', { cls: 'card' }, rows),
+        el('div', { cls: 'card' }, withMic(reply), el('div', { cls: 'row', style: 'margin-top:8px' }, yes, no)));
+    });
+  }).catch(fail);
 }
 
 function addMemberScreen() {
@@ -691,7 +753,8 @@ function teamAttScreen(date) {
       var dateIn = el('input', { type: 'date', value: L.date, max: L.today });
       dateIn.addEventListener('change', function () { if (dateIn.value) teamAttScreen(dateIn.value); });
       var rows = L.members.map(function (m) {
-        return el('div', { cls: 'person' }, el('b', { text: m.name }), m.skill ? el('div', { cls: 'muted', text: m.skill }) : null,
+        var times = [m.inTime ? w('att.inAt') + ' ' + m.inTime : '', m.outTime ? w('att.outAt') + ' ' + m.outTime : ''].filter(String).join(' · ');
+        return el('div', { cls: 'person' }, el('b', { text: m.name }), m.skill || times ? el('div', { cls: 'muted', text: [m.skill, times].filter(String).join(' · ') }) : null,
           segButtons(['P', 'A', 'H'].map(function (c) { return { code: c, label: stLabel(c) }; }), m.status || 'P', function (c) { marks[m.id].status = c; }));
       });
       var save = el('button', { cls: 'main sticky', text: w('app.save') });
@@ -893,8 +956,9 @@ function adminMoneyView() {
 }
 
 /* ------------------------------------------------------------ join */
-function joinForm(code, adminToken) {
-  var F = { Type: 'Employee', 'Emergency mobile': '1', Language: S.lang };
+function joinForm(code, adminToken, teamName) {
+  var team = !!teamName;
+  var F = { Type: team ? 'Team member' : 'Employee', 'Emergency mobile': '1', Language: S.lang };
   var P = {};
   var step = 0;
   var inputs = {};
@@ -930,9 +994,10 @@ function joinForm(code, adminToken) {
 
   var steps = [
     function () {
-      return [el('h3', { text: w('join.step1') }), el('label', { text: w('field.Type') }),
-        choice(['Employee', 'Team lead'], 'Type', [w('word.employee'), w('word.teamLead')]),
+      return [el('h3', { text: w('join.step1') }),
+        team ? null : [el('label', { text: w('field.Type') }), choice(['Employee', 'Team lead'], 'Type', [w('word.employee'), w('word.teamLead')])],
         lbl('Full name'), txt('Full name'),
+        team ? [el('label', { text: w('team.skill') + ' (' + w('app.optional') + ')' }), txt('Designation')] : null,
         F.Type === 'Team lead' ? [lbl('Display name'), el('div', { cls: 'muted', text: w('join.teamNameHelp') }), txt('Display name')] : null,
         lbl('DOB', true), date('DOB'), lbl('Email', true), (function () { var e = inputs.Email || el('input', { type: 'email', value: F.Email || '' }); inputs.Email = e; return e; })()];
     },
@@ -949,7 +1014,7 @@ function joinForm(code, adminToken) {
     },
     function () {
       return [el('h3', { text: w('join.step4') }), lbl('Aadhaar'), num('Aadhaar'), lbl('PAN', true), up('PAN'),
-        lbl('Bank account', true), num('Bank account'), lbl('IFSC', true), up('IFSC'), lbl('Account holder', true), txt('Account holder')];
+        team ? null : [lbl('Bank account', true), num('Bank account'), lbl('IFSC', true), up('IFSC'), lbl('Account holder', true), txt('Account holder')]];
     },
     function () { return [el('h3', { text: w('join.step5') }), photo('Photo'), photo('Aadhaar photo'), photo('PAN photo')]; },
     function () {
@@ -989,7 +1054,7 @@ function joinForm(code, adminToken) {
     btn.disabled = true; btn.textContent = w('app.wait');
     call('submitJoin', code || '', adminToken || '', form, P).then(function (r) {
       show(function () {
-        screen(el('div', { cls: 'card' }, el('h2', { text: '✓ ' + w('app.done') }), el('p', { text: w('join.thanks') }), el('div', { cls: 'muted', text: r.id })),
+        screen(el('div', { cls: 'card' }, el('h2', { text: '✓ ' + w('app.done') }), el('p', { text: w(team ? 'join.teamThanks' : 'join.thanks') }), el('div', { cls: 'muted', text: r.id })),
           adminToken ? el('button', { cls: 'main', text: w('app.back'), on: { click: adminHome } }) : null);
       });
     }).catch(function (e) {
@@ -1013,7 +1078,7 @@ function joinForm(code, adminToken) {
     });
     screen(
       adminToken ? backBtn(adminHome) : null,
-      el('h2', { text: w('join.title') }), bar,
+      el('h2', { text: w('join.title') }), team ? el('div', { cls: 'muted', style: 'margin:-6px 0 10px', text: w('join.teamTitle') + ': ' + teamName }) : null, bar,
       el('div', { cls: 'card' }, steps[step](), nextBtn),
       step > 0 ? el('button', { cls: 'link', text: '← ' + w('app.back'), on: { click: function () { collect(); step--; render(); } } }) : null);
   }
@@ -1066,7 +1131,7 @@ function adminQueueView() {
     if (q.joiners.length) cards.push(el('h3', { text: 'New joiners (' + q.joiners.length + ')' }));
     q.joiners.forEach(function (j) {
       cards.push(el('div', { cls: 'card', on: { click: function () { adminPersonView(j.id, true); } } },
-        el('div', { cls: 'kv' }, el('div', {}, el('b', { text: j.name }), el('div', { cls: 'muted', text: j.type + ' · ' + j.mobile + ' · ' + j.created })),
+        el('div', { cls: 'kv' }, el('div', {}, el('b', { text: j.name }), el('div', { cls: 'muted', text: [j.type + (j.team ? ' (' + j.team + ')' : ''), j.mobile, j.created].join(' · ') })),
           el('span', { cls: 'pill wait', text: 'Review →' }))));
     });
     cards.push(el('h3', { text: 'Requests (' + q.requests.length + ')' }));
@@ -1143,7 +1208,8 @@ function adminPersonView(id, reviewing) {
   S.redraw = function () { adminPersonView(id, reviewing); };
   adminShell(el('div', { cls: 'spin', text: w('app.wait') }));
   call('adminPerson', S.token, id).then(function (p) {
-    var skip = { _sheetLink: 1, _team: 1, _requests: 1 };
+    var skip = { _sheetLink: 1, _team: 1, _requests: 1, _lead: 1 };
+    if (p._lead) p['Team lead ID'] = p['Team lead ID'] + ' (' + p._lead + ')';
     var rows = Object.keys(p).filter(function (k) { return !skip[k] && p[k] !== ''; }).map(function (k) {
       var v = p[k];
       if (k === 'Emergency mobile' && p['Mobile ' + v]) v = v + ' (' + p['Mobile ' + v] + ')';

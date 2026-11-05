@@ -29,7 +29,7 @@ SCHEMA[TABS.PEOPLE] = [
   'Aadhaar', 'PAN', 'Bank account', 'IFSC', 'Account holder',
   'Photo', 'Aadhaar photo', 'PAN photo', 'Language',
   'Supervisor', 'Self check-in', 'Login Gmail', 'PIN hash', 'Must change PIN',
-  'Consent date', 'Created at', 'Updated at', 'Notes'
+  'Consent date', 'Created at', 'Updated at', 'Notes', 'Team lead ID'
 ];
 SCHEMA[TABS.TEAM] = [
   'Member ID', 'Team lead ID', 'Team lead', 'Member name', 'Mobile', 'Skill', 'Active', 'Notes', 'Added at'
@@ -45,7 +45,10 @@ SCHEMA[TABS.ATT] = [
   'Date', 'Person ID', 'Name', 'Status', 'OT', 'In time', 'Out time', 'In location', 'Out location',
   'Source', 'Marked by', 'Confirmed', 'Remarks', 'Updated at', 'Key'
 ];
-SCHEMA[TABS.TEAM_ATT] = ['Date', 'Team lead ID', 'Team lead', 'Member ID', 'Member name', 'Status', 'Marked at', 'Key'];
+SCHEMA[TABS.TEAM_ATT] = [
+  'Date', 'Team lead ID', 'Team lead', 'Member ID', 'Member name', 'Status', 'Marked at', 'Key',
+  'In time', 'Out time', 'In location', 'Out location', 'Source'
+];
 SCHEMA[TABS.HOLIDAYS] = ['Date', 'Holiday'];
 SCHEMA[TABS.PAY] = ['Person ID', 'Name', 'Pay type', 'Monthly salary', 'Daily rate', 'PF', 'UAN', 'ESI', 'ESI number', 'Effective from', 'Notes'];
 SCHEMA[TABS.MONEY] = ['Entry ID', 'Date', 'Person ID', 'Name', 'Type', 'Amount', 'Monthly recovery', 'Note', 'Entered by', 'Entered at'];
@@ -60,8 +63,10 @@ SCHEMA[TABS.LEDGER] = [
   'Work pending', 'Entered by', 'Entered at'
 ];
 
-var PERSON_TYPES = ['Employee', 'Team lead'];
-var PERSON_STATUS = ['Pending review', 'Active', 'Left', 'Rejected'];
+/** Team member: works under a team lead and is paid by them. Only has a People row if they joined
+ *  through their team lead's invite link; quick-added members live on Team members only. */
+var PERSON_TYPES = ['Employee', 'Team lead', 'Team member'];
+var PERSON_STATUS = ['Team lead review', 'Pending review', 'Active', 'Left', 'Rejected'];
 var REQUEST_ABOUT = ['My details', 'My team', 'Attendance', 'Salary', 'Advance', 'Other'];
 var REQUEST_STATUS = ['Open', 'Approved', 'Rejected'];
 var LANGS = ['en', 'hi'];
@@ -76,7 +81,7 @@ var TEXT_COLS = {
   'Team members': ['Mobile'],
   'Admins': ['PIN hash'],
   'Attendance': ['In time', 'Out time', 'Key', 'Person ID'],
-  'Team attendance': ['Key'],
+  'Team attendance': ['Key', 'In time', 'Out time', 'Member ID'],
   'Pay setup': ['UAN', 'ESI number'],
   'Salary': ['Month', 'Key']
 };
@@ -201,7 +206,7 @@ function applyValidations_(ss) {
     });
     sh.setConditionalFormatRules(kept);
   };
-  colour(p, 'Status', { 'Pending review': '#f9eeda', 'Active': '#e5f4e4', 'Left': '#f0efec', 'Rejected': '#fbebeb' });
+  colour(p, 'Status', { 'Team lead review': '#f9eeda', 'Pending review': '#f9eeda', 'Active': '#e5f4e4', 'Left': '#f0efec', 'Rejected': '#fbebeb' });
   colour(r, 'Status', { 'Open': '#f9eeda', 'Approved': '#e5f4e4', 'Rejected': '#fbebeb' });
 
   var at = ss.getSheetByName(TABS.ATT);

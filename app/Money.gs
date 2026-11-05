@@ -383,6 +383,7 @@ function ledgerFor_(leadId) {
 function myMoney(token) {
   var p = staff_(token);
   if (p['Type'] === 'Team lead') return { lead: true, ledger: ledgerFor_(p['ID']) };
+  if (p['Type'] !== 'Employee') throw new Error('E_GENERIC');
   var month = todayStr_().slice(0, 7);
   var ctx = salaryCtx_(month);
   ctx.upTo = todayStr_();

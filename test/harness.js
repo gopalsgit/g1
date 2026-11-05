@@ -143,5 +143,13 @@ module.exports = { makeEnv, seed() {
   G.reportProblem(st, 'Attendance', ago(1), 'Marked half day but I was here all day');
   G.submitJoin(G.makeJoinCode_(7), '', { Type: 'Employee', 'Full name': 'Anita Devi', 'Mobile 1': '9811111111', 'Emergency mobile': '1',
     'Emergency contact name': 'Mohan', Address: 'Kalyan', Aadhaar: AADHAAR, consent: true, pin: '5555' }, {});
-  return { G, tokens: { staff: st, lead, join: G.makeJoinCode_(7), g: G.sign_({ k: 'g', e: 'gopal@gmail.com', x: Date.now() + 600000 }) } };
+  const teamJoin = G.teamInviteLink(lead).link.split('?join=')[1];
+  const tmForm = (name, mobile, skill) => ({ 'Full name': name, Designation: skill, 'Mobile 1': mobile, 'Emergency mobile': '1',
+    'Emergency contact name': 'Family', Address: 'Bhiwandi', Aadhaar: AADHAAR, consent: true, pin: '2222' });
+  const a1 = G.submitJoin(teamJoin, '', tmForm('Arif Khan', '9811122233', 'Stitching'), {});
+  G.teamDecideJoiner(lead, a1.id, true, ''); G.adminDecideJoiner(adm, a1.id, true, '');
+  const member = G.login('9811122233', '2222').token;
+  G.checkIn(member, 'in', { lat: 19.3, lng: 73.06, acc: 10 });
+  G.submitJoin(teamJoin, '', tmForm('Pappu Yadav', '9811122244', 'Ironing'), {});
+  return { G, tokens: { staff: st, lead, member, teamJoin, join: G.makeJoinCode_(7), g: G.sign_({ k: 'g', e: 'gopal@gmail.com', x: Date.now() + 600000 }) } };
 } };

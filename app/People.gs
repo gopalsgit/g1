@@ -11,22 +11,36 @@ var SELF_FIELDS = [
 var MASKED_FIELDS = ['Aadhaar', 'PAN', 'Bank account'];
 var PHOTO_FIELDS = ['Photo', 'Aadhaar photo', 'PAN photo'];
 var DATE_FIELDS = ['DOB', 'Joining date', 'Exit date'];
+/** Team members are paid by their team lead, so they never give bank details. */
+var BANK_FIELDS = ['Bank account', 'IFSC', 'Account holder'];
+function selfFieldsFor_(p) {
+  return p['Type'] === 'Team member' ? SELF_FIELDS.filter(function (f) { return BANK_FIELDS.indexOf(f) < 0; }) : SELF_FIELDS;
+}
+function leadName_(lead) { return lead ? String(lead['Display name'] || lead['Full name']) : ''; }
 
 /** Words, settings and anything the first screen needs. No sign-in required. */
 function getBoot(joinCode) {
   var w = loadWords_();
-  return {
+  var out = {
     words: w.words,
     orgName: w.settings['setting.orgName'],
     signinUrl: w.settings['setting.signinUrl'] || '',
-    joinValid: joinCode ? joinCodeValid_(joinCode) : false
+    joinValid: false
   };
+  if (joinCode) {
+    try {
+      out.joinValid = joinCodeValid_(joinCode);
+      var lead = out.joinValid ? joinLead_(joinCode) : null;
+      if (lead) out.joinTeam = leadName_(lead);
+    } catch (e) { out.joinValid = false; }
+  }
+  return out;
 }
 
 /** The person's own record for the app: sensitive numbers masked, photos as yes/no. */
 function publicPerson_(p) {
   var out = { id: String(p['ID']), type: String(p['Type']) };
-  SELF_FIELDS.concat(['Designation', 'Department', 'Joining date', 'Language']).forEach(function (f) {
+  selfFieldsFor_(p).concat(['Designation', 'Department', 'Joining date', 'Language']).forEach(function (f) {
     var v = p[f];
     if (DATE_FIELDS.indexOf(f) >= 0) v = fmtDate_(v);
     else if (MASKED_FIELDS.indexOf(f) >= 0) v = mask_(v);
@@ -55,12 +69,16 @@ function getMe(token) {
     mustChangePin: String(p['Must change PIN']).toLowerCase() === 'yes',
     requests: requests
   };
-  if (p['Type'] === 'Team lead') out.team = teamOf_(p['ID']);
-  if (p['Type'] === 'Employee') {
-    out.today = attendanceOn_(p['ID'], todayStr_());
+  if (p['Type'] === 'Team lead') {
+    out.team = teamOf_(p['ID']);
+    out.teamJoiners = teamJoiners_(p['ID']);
+  }
+  if (p['Type'] === 'Employee' || p['Type'] === 'Team member') {
+    out.today = p['Type'] === 'Employee' ? attendanceOn_(p['ID'], todayStr_()) : teamAttOn_(p['ID'], todayStr_());
     out.todayDate = todayStr_();
     out.autoCheckIn = String(setting_('autoCheckIn')).toLowerCase() === 'yes';
   }
+  if (p['Type'] === 'Team member') out.leadName = leadName_(findBy_(TABS.PEOPLE, 'ID', p['Team lead ID']));
   out.isSupervisor = String(p['Supervisor']).toLowerCase() === 'yes';
   return out;
 }
@@ -138,7 +156,7 @@ function savePhoto_(personId, field, dataUrl) {
 /** A change to one of the person's own details. Language changes at once; the rest wait for an admin. */
 function requestChange(token, field, value, note) {
   var p = staff_(token);
-  if (SELF_FIELDS.indexOf(field) < 0) throw new Error('E_GENERIC');
+  if (selfFieldsFor_(p).indexOf(field) < 0) throw new Error('E_GENERIC');
   return withLock_(function () {
     var asked = PHOTO_FIELDS.indexOf(field) >= 0 ? savePhoto_(p['ID'], field, value) : cleanField_(field, value);
     if (field === 'Mobile 1' && mobileTaken_(asked, p['ID'])) throw new Error('E_FIELD:Mobile 1:err.mobileTaken');
@@ -216,14 +234,17 @@ var JOIN_FIELDS = [
  * (adminToken). The record lands as Pending review.
  */
 function submitJoin(joinCode, adminToken, form, photos) {
-  var adminRow = null;
+  var adminRow = null, lead = null;
   if (adminToken) adminRow = admin_(adminToken);
   else if (!joinCodeValid_(joinCode)) throw new Error('E_BADJOIN');
+  else lead = joinLead_(joinCode);
   form = form || {};
   photos = photos || {};
-  var type = PERSON_TYPES.indexOf(form['Type']) >= 0 ? form['Type'] : 'Employee';
+  // A team lead's invite link always makes a Team member; other links never do.
+  var type = lead ? 'Team member' : (form['Type'] === 'Team lead' ? 'Team lead' : 'Employee');
+  var fields = lead ? JOIN_FIELDS.filter(function (f) { return BANK_FIELDS.indexOf(f) < 0; }).concat(['Designation']) : JOIN_FIELDS;
   var clean = {};
-  JOIN_FIELDS.forEach(function (f) {
+  fields.forEach(function (f) {
     if (f === 'Language') { clean[f] = LANGS.indexOf(form[f]) >= 0 ? form[f] : 'hi'; return; }
     clean[f] = cleanField_(f, form[f]);
   });
@@ -237,19 +258,78 @@ function submitJoin(joinCode, adminToken, form, photos) {
 
   return withLock_(function () {
     if (mobileTaken_(clean['Mobile 1'])) throw new Error('E_FIELD:Mobile 1:err.mobileTaken');
-    var id = nextId_(TABS.PEOPLE, 'ID', type === 'Team lead' ? 'T' : 'E');
+    var id = nextId_(TABS.PEOPLE, 'ID', type === 'Team lead' ? 'T' : type === 'Team member' ? 'W' : 'E');
+    var status = lead ? 'Team lead review' : 'Pending review';
     var row = {
-      'ID': id, 'Type': type, 'Status': 'Pending review', 'PIN hash': hashPin_(form.pin), 'Must change PIN': 'no',
+      'ID': id, 'Type': type, 'Status': status, 'PIN hash': hashPin_(form.pin), 'Must change PIN': 'no',
       'Supervisor': 'no', 'Self check-in': 'no', 'Consent date': new Date(), 'Created at': new Date(), 'Updated at': new Date(),
-      'Notes': adminRow ? 'Added by ' + adminRow['Gmail'] : 'Joining link'
+      'Notes': adminRow ? 'Added by ' + adminRow['Gmail'] : lead ? 'Invite link from ' + leadName_(lead) : 'Joining link',
+      'Team lead ID': lead ? lead['ID'] : ''
     };
     Object.keys(clean).forEach(function (f) {
       row[f] = DATE_FIELDS.indexOf(f) >= 0 ? (clean[f] ? parseDate_(clean[f]) : '') : clean[f];
     });
     PHOTO_FIELDS.forEach(function (f) { if (photos[f]) row[f] = savePhoto_(id, f, photos[f]); });
     appendRow_(TABS.PEOPLE, row);
-    audit_(adminRow ? adminRow['Gmail'] : clean['Full name'], TABS.PEOPLE, id, { 'Status': ['', 'Pending review'] }, adminRow ? 'app (admin)' : 'joining link');
+    audit_(adminRow ? adminRow['Gmail'] : clean['Full name'], TABS.PEOPLE, id, { 'Status': ['', status] },
+      adminRow ? 'app (admin)' : lead ? 'team invite link' : 'joining link');
+    if (lead) return { ok: true, id: id, team: leadName_(lead) };
     alertAdmins_('New joiner: ' + clean['Full name'], clean['Full name'] + ' (' + type + ', mobile ' + clean['Mobile 1'] + ') filled the joining form. Review it in the app or on the People tab.');
     return { ok: true, id: id };
+  });
+}
+
+/* ------------------------------------------------- team lead's invites */
+
+/** A 7-day invite link a team lead shares with their own team. People who use it join that team. */
+function teamInviteLink(token) {
+  var p = staff_(token);
+  if (p['Type'] !== 'Team lead') throw new Error('E_GENERIC');
+  var url = appUrl_();
+  if (!url) throw new Error('E_GENERIC');
+  return { link: url + '?join=' + makeJoinCode_(7, p['ID']), days: 7 };
+}
+
+/** Members who joined through this lead's link and are waiting for the lead, or now for an admin. */
+function teamJoiners_(leadId) {
+  return readTable_(TABS.PEOPLE).filter(function (r) {
+    return r['Type'] === 'Team member' && String(r['Team lead ID']) === String(leadId) &&
+      (r['Status'] === 'Team lead review' || r['Status'] === 'Pending review');
+  }).map(function (r) {
+    return { id: String(r['ID']), name: String(r['Full name']), mobile: String(r['Mobile 1']), skill: String(r['Designation']),
+      status: String(r['Status']), created: fmtDate_(r['Created at']) };
+  });
+}
+
+/** What a team lead sees of a member who wants to join: enough to recognise them, numbers masked. */
+function teamJoiner(token, personId) {
+  var lead = staff_(token);
+  var r = findBy_(TABS.PEOPLE, 'ID', personId);
+  if (!r || r['Type'] !== 'Team member' || String(r['Team lead ID']) !== String(lead['ID'])) throw new Error('E_GENERIC');
+  var out = publicPerson_(r);
+  out.status = String(r['Status']);
+  return out;
+}
+
+/** The team lead confirms the person really works for them (then an admin checks), or turns them away. */
+function teamDecideJoiner(token, personId, approve, reply) {
+  var lead = staff_(token);
+  if (lead['Type'] !== 'Team lead') throw new Error('E_GENERIC');
+  reply = String(reply || '').trim();
+  if (!approve && !reply) throw new Error('E_FIELD:reply:err.replyNeeded');
+  return withLock_(function () {
+    var r = findBy_(TABS.PEOPLE, 'ID', personId);
+    if (!r || r['Type'] !== 'Team member' || String(r['Team lead ID']) !== String(lead['ID'])) throw new Error('E_GENERIC');
+    if (r['Status'] !== 'Team lead review') throw new Error('E_ALREADY');
+    var upd = { 'Status': approve ? 'Pending review' : 'Rejected', 'Updated at': new Date() };
+    upd['Notes'] = (r['Notes'] ? r['Notes'] + '\n' : '') + (approve ? 'Confirmed by team lead ' : 'Turned away by team lead ') +
+      leadName_(lead) + (reply ? ': ' + reply : '');
+    var ch = updateRow_(TABS.PEOPLE, r._row, upd);
+    audit_(lead['Full name'], TABS.PEOPLE, personId, ch, 'app (team lead)');
+    if (approve) {
+      alertAdmins_('New team member: ' + r['Full name'], r['Full name'] + ' (mobile ' + r['Mobile 1'] + ') joined ' +
+        leadName_(lead) + "'s team and the team lead has confirmed them. Check the details and photos in the app or on the People tab.");
+    }
+    return { ok: true };
   });
 }
